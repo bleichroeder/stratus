@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# stratus
 
-## Getting Started
+A developer-focused note-taking tool. Fast, minimal, and powerful.
 
-First, run the development server:
+## Features
+
+- **Rich text editor** — Headings, lists, task lists, code blocks with syntax highlighting, images, blockquotes
+- **Slash commands** — Type `/` to insert blocks without leaving the keyboard
+- **Wiki links** — Type `[[` to link notes together and build a knowledge graph
+- **Backlinks** — See which notes reference the current one
+- **Command palette** — `Ctrl+K` to search notes, run actions, switch themes
+- **Full-text search** — Searches across all note content, not just titles
+- **Sketch pad** — Freehand drawing canvas with pen, eraser, colors, and pressure sensitivity
+- **Tabs** — Multiple notes open at once, right-click for close/close others/close all
+- **Folders & drag-drop** — Nested folder organization, rearrange by dragging
+- **Daily notes** — One-click journal entries organized by date
+- **Archive** — Soft delete with 7-day auto-cleanup
+- **Public sharing** — Expiring read-only links for any note
+- **Dark mode** — System-aware with manual toggle
+- **Mobile responsive** — Drawer layout for phones and tablets
+- **Multi-select** — `Ctrl+click` to select multiple notes for bulk archive
+
+## Stack
+
+- [Next.js](https://nextjs.org) — App Router, server components
+- [Supabase](https://supabase.com) — Auth, Postgres, Storage
+- [Tiptap](https://tiptap.dev) — Rich text editor
+- [Tailwind CSS](https://tailwindcss.com) v4
+- [perfect-freehand](https://github.com/steveruizok/perfect-freehand) — Sketch pad
+
+## Setup
+
+### 1. Install
+
+```bash
+npm install
+```
+
+### 2. Supabase
+
+Create a free project at [supabase.com](https://supabase.com). Run the SQL files in order in the SQL Editor:
+
+1. `supabase/schema.sql`
+2. `supabase/migration_archive.sql`
+3. `supabase/migration_fts.sql`
+4. `supabase/migration_sharing.sql`
+
+### 3. Environment
+
+```bash
+cp .env.local.example .env.local
+```
+
+Fill in your values from Supabase Project Settings > API.
+
+### 4. Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Deploy
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Push to GitHub, import in [Vercel](https://vercel.com), add the three env vars, deploy.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## License
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
