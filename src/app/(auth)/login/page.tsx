@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LogoFull } from "@/components/ui/logo";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -28,6 +29,8 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
+      // Cache password for vault auto-unlock (cleared after use or on tab close)
+      try { sessionStorage.setItem("_vp", password); } catch {}
       router.push("/");
       router.refresh();
     }
@@ -39,6 +42,14 @@ export default function LoginPage() {
         <div className="space-y-2">
           <LogoFull size={28} />
           <p className="text-sm text-stone-500 dark:text-stone-400 font-mono">sign in to your account</p>
+        </div>
+
+        <GoogleSignInButton />
+
+        <div className="flex items-center gap-3 text-xs text-stone-400 dark:text-stone-500">
+          <div className="flex-1 h-px bg-stone-200 dark:bg-stone-700" />
+          <span>or</span>
+          <div className="flex-1 h-px bg-stone-200 dark:bg-stone-700" />
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">

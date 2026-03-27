@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
-import type { Note, Json } from "@/lib/types";
+import type { Note, Json, NoteCollaborator } from "@/lib/types";
 
 function getSupabase() {
   return createClient();
@@ -45,7 +45,7 @@ export async function getNote(id: string): Promise<Note | null> {
 }
 
 export async function createNote(
-  note: { title?: string; content?: Json | null; parent_id?: string | null; is_folder?: boolean } = {}
+  note: { title?: string; content?: Json | null; parent_id?: string | null; is_folder?: boolean; encrypted?: boolean } = {}
 ): Promise<Note> {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -55,6 +55,7 @@ export async function createNote(
       content: note.content ?? null,
       parent_id: note.parent_id ?? null,
       is_folder: note.is_folder ?? false,
+      encrypted: note.encrypted ?? false,
     })
     .select()
     .single();
@@ -65,7 +66,7 @@ export async function createNote(
 
 export async function updateNote(
   id: string,
-  updates: { title?: string; content?: Json | null; parent_id?: string | null }
+  updates: { title?: string; content?: Json | null; parent_id?: string | null; encrypted?: boolean }
 ): Promise<Note> {
   const supabase = getSupabase();
   const { data, error } = await supabase
@@ -178,7 +179,115 @@ export async function unshareNote(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function uploadImage(file: File): Promise<string | null> {
+// --- Collaboration ---
+
+export async function getCollaborators(noteId: string): Promise<NoteCollaborator[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("note_collaborators")
+    .select("*")
+    .eq("note_id", noteId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function addCollaborator(
+  noteId: string,
+  userId: string,
+  role: "editor" | "viewer" = "editor"
+): Promise<NoteCollaborator> {
+  const supabase = getSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from("note_collaborators")
+    .insert({
+      note_id: noteId,
+      user_id: userId,
+      role,
+      invited_by: user?.id,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function removeCollaborator(noteId: string, userId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("note_collaborators")
+    .delete()
+    .eq("note_id", noteId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+}
+
+export async function getCollaborativeNoteIds(): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("note_collaborators")
+    .select("note_id");
+
+  if (error) throw error;
+
+  // Return unique note IDs
+  return [...new Set((data ?? []).map((r) => r.note_id))];
+}
+
+export async function updateCollaboratorRole(
+  noteId: string,
+  userId: string,
+  role: "editor" | "viewer"
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("note_collaborators")
+    .update({ role })
+    .eq("note_id", noteId)
+    .eq("user_id", userId);
+
+  if (error) throw error;
+}
+
+export async function getSharedWithMeNotes(): Promise<Note[]> {
+  const supabase = getSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  // Get note IDs where the current user is a collaborator
+  const { data: collabs, error: collabError } = await supabase
+    .from("note_collaborators")
+    .select("note_id")
+    .eq("user_id", user.id);
+
+  if (collabError) throw collabError;
+  if (!collabs || collabs.length === 0) return [];
+
+  const noteIds = collabs.map((c) => c.note_id);
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*")
+    .in("id", noteIds)
+    .is("archived_at", null)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function uploadImage(
+  file: File,
+  options?: { noteId?: string; isCollaborative?: boolean }
+): Promise<string | null> {
   const supabase = getSupabase();
   const {
     data: { user },
@@ -186,7 +295,10 @@ export async function uploadImage(file: File): Promise<string | null> {
   if (!user) return null;
 
   const ext = file.name.split(".").pop();
-  const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
+  const fileName =
+    options?.isCollaborative && options?.noteId
+      ? `shared/${options.noteId}/${crypto.randomUUID()}.${ext}`
+      : `${user.id}/${crypto.randomUUID()}.${ext}`;
 
   const { error } = await supabase.storage
     .from("note-attachments")

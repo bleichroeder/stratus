@@ -27,6 +27,7 @@ import { PromptModal, ImageUploadModal } from "@/components/ui/modal";
 interface EditorToolbarProps {
   editor: Editor | null;
   onImageUpload?: (file: File) => Promise<string | null>;
+  disabled?: boolean;
 }
 
 function ToolbarButton({
@@ -61,7 +62,7 @@ function Separator() {
   return <div className="w-px h-5 bg-stone-300 dark:bg-stone-600 mx-1" />;
 }
 
-export function EditorToolbar({ editor, onImageUpload }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onImageUpload, disabled = false }: EditorToolbarProps) {
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkDefault, setLinkDefault] = useState("");
   const [imageModalOpen, setImageModalOpen] = useState(false);
@@ -97,7 +98,7 @@ export function EditorToolbar({ editor, onImageUpload }: EditorToolbarProps) {
 
   return (
     <>
-      <div className="flex items-center gap-0.5 px-2 py-1 md:px-3 md:py-1.5 bg-white dark:bg-stone-950 sticky top-0 z-10 flex-wrap">
+      <div className={`flex items-center gap-0.5 px-2 py-1 md:px-3 md:py-1.5 bg-white dark:bg-stone-950 sticky top-0 z-10 flex-wrap${disabled ? " opacity-50 pointer-events-none" : ""}`}>
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}

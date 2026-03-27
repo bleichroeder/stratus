@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 
 interface ModalProps {
   open: boolean;
@@ -56,6 +56,7 @@ interface PromptModalProps {
   placeholder?: string;
   defaultValue?: string;
   submitLabel?: string;
+  loading?: boolean;
 }
 
 export function PromptModal({
@@ -66,6 +67,7 @@ export function PromptModal({
   placeholder,
   defaultValue = "",
   submitLabel = "OK",
+  loading = false,
 }: PromptModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -77,35 +79,40 @@ export function PromptModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (loading) return;
     const val = inputRef.current?.value.trim();
     if (val) {
       onSubmit(val);
-      onClose();
+      if (!loading) onClose();
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={loading ? () => {} : onClose} title={title}>
       <form onSubmit={handleSubmit} className="space-y-3">
         <input
           ref={inputRef}
           type="text"
           defaultValue={defaultValue}
           placeholder={placeholder}
-          className="w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 bg-white dark:bg-stone-800 placeholder-stone-400 dark:placeholder-stone-500 focus:border-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-500"
+          disabled={loading}
+          className="w-full rounded-md border border-stone-300 dark:border-stone-700 px-3 py-2 text-sm text-stone-900 dark:text-stone-100 bg-white dark:bg-stone-800 placeholder-stone-400 dark:placeholder-stone-500 focus:border-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-500 disabled:opacity-50"
         />
         <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 text-sm rounded-md text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+            disabled={loading}
+            className="px-3 py-1.5 text-sm rounded-md text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="px-3 py-1.5 text-sm rounded-md bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200"
+            disabled={loading}
+            className="px-3 py-1.5 text-sm rounded-md bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 flex items-center gap-1.5"
           >
+            {loading && <Loader2 size={14} className="animate-spin" />}
             {submitLabel}
           </button>
         </div>
@@ -122,6 +129,7 @@ interface ConfirmModalProps {
   message: string;
   confirmLabel?: string;
   danger?: boolean;
+  loading?: boolean;
 }
 
 export function ConfirmModal({
@@ -132,30 +140,34 @@ export function ConfirmModal({
   message,
   confirmLabel = "Confirm",
   danger = false,
+  loading = false,
 }: ConfirmModalProps) {
   return (
-    <Modal open={open} onClose={onClose} title={title}>
+    <Modal open={open} onClose={loading ? () => {} : onClose} title={title}>
       <p className="text-sm text-stone-600 dark:text-stone-400 mb-4">{message}</p>
       <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
-          className="px-3 py-1.5 text-sm rounded-md text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+          disabled={loading}
+          className="px-3 py-1.5 text-sm rounded-md text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
         >
           Cancel
         </button>
         <button
           type="button"
+          disabled={loading}
           onClick={() => {
             onConfirm();
-            onClose();
+            if (!loading) onClose();
           }}
-          className={`px-3 py-1.5 text-sm rounded-md text-white ${
+          className={`px-3 py-1.5 text-sm rounded-md text-white flex items-center gap-1.5 disabled:opacity-50 ${
             danger
               ? "bg-red-600 hover:bg-red-700"
               : "bg-stone-900 dark:bg-stone-100 dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200"
           }`}
         >
+          {loading && <Loader2 size={14} className="animate-spin" />}
           {confirmLabel}
         </button>
       </div>

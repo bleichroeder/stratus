@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, Component, type ReactNode, type ErrorInfo } from "react";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { NoteEditor } from "@/components/editor/editor";
 import { TabBar, type Tab } from "@/components/editor/tabs";
@@ -19,21 +19,27 @@ import {
   uploadImage,
   shareNote,
   unshareNote,
+  getCollaborators,
+  getSharedWithMeNotes,
+  getCollaborativeNoteIds,
 } from "@/lib/notes";
-import type { Note, Json } from "@/lib/types";
+import type { NoteCollaborator } from "@/lib/types";
+import { notifyPartyKitRoom } from "@/lib/yjs/notify";
+import type { Note, Json, CalendarEvent } from "@/lib/types";
 import {
   FileText,
-  Command,
-  Slash,
-  Link2,
-  MousePointer2,
-  GripVertical,
-  CalendarDays,
   Menu,
+  Loader2,
 } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { Welcome } from "@/components/onboarding/welcome";
 import { LogoFull } from "@/components/ui/logo";
+import { Dashboard } from "@/components/dashboard/dashboard";
+import { VaultProvider, useVault } from "@/components/vault/vault-context";
+import { VaultSetupModal } from "@/components/vault/vault-setup-modal";
+import { VaultUnlockModal } from "@/components/vault/vault-unlock-modal";
+import { encryptContent, decryptContent, isEncryptedPayload } from "@/lib/crypto";
+import { createClient } from "@/lib/supabase/client";
 
 function todayString(): string {
   return new Date().toLocaleDateString("en-US", {
@@ -41,6 +47,27 @@ function todayString(): string {
     month: "long",
     day: "numeric",
   });
+}
+
+class EditorErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[EditorErrorBoundary] Full stack:", error, info.componentStack);
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex-1 flex items-center justify-center p-8">
+          <div className="text-center space-y-2">
+            <p className="text-sm text-red-500">Editor crashed: {this.state.error.message}</p>
+            <button onClick={() => this.setState({ error: null })} className="text-xs text-blue-500 underline">Retry</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function AppPage() {
@@ -53,6 +80,58 @@ export default function AppPage() {
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isOAuthOnlyUser, setIsOAuthOnlyUser] = useState(false);
+  const [hasGoogle, setHasGoogle] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Collaboration state
+  const [activeNoteCollaborators, setActiveNoteCollaborators] = useState<NoteCollaborator[]>([]);
+  const [collabLoaded, setCollabLoaded] = useState(false);
+  const [sharedWithMeNotes, setSharedWithMeNotes] = useState<Note[]>([]);
+  const [collaborativeNoteIds, setCollaborativeNoteIds] = useState<Set<string>>(new Set());
+
+  // Toast notification
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
+  function showToast(message: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast(message);
+    toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+  }
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  // Calendar state
+  const [preparingNoteForEventId, setPreparingNoteForEventId] = useState<string | null>(null);
+
+  // Loading / feedback states
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [creatingNote, setCreatingNote] = useState(false);
+  const [creatingDailyNote, setCreatingDailyNote] = useState(false);
+  const [folderLoading, setFolderLoading] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [noteLoading, setNoteLoading] = useState(false);
+
+  // Detect OAuth user and display name
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const providers: string[] = user.app_metadata?.providers ?? [];
+        const primaryProvider = user.app_metadata?.provider;
+        // OAuth-only: signed up via Google, has no password
+        setIsOAuthOnlyUser(primaryProvider !== "email");
+        // Has Google linked (for calendar features)
+        setHasGoogle(providers.includes("google"));
+        const meta = user.user_metadata;
+        const name = meta?.full_name ?? meta?.name ?? null;
+        setUserName(name ?? user.email?.split("@")[0] ?? null);
+        setCurrentUserId(user.id);
+        setCurrentUserEmail(user.email ?? null);
+      }
+    });
+  }, []);
 
   // Detect mobile
   useEffect(() => {
@@ -76,6 +155,10 @@ export default function AppPage() {
     noteId: null,
     isFolder: false,
   });
+  const [vaultSetupOpen, setVaultSetupOpen] = useState(false);
+  const [vaultUnlockOpen, setVaultUnlockOpen] = useState(false);
+
+  const { status: vaultStatus, vaultKey, vaultFolderId, setVaultFolderId, setupVault, unlock, lock, recoverVault, isInsideVault } = useVault();
 
   const loadNotes = useCallback(async () => {
     try {
@@ -99,40 +182,103 @@ export default function AppPage() {
 
   useEffect(() => {
     loadNotes();
+    getSharedWithMeNotes()
+      .then(setSharedWithMeNotes)
+      .catch(() => setSharedWithMeNotes([]));
+    getCollaborativeNoteIds()
+      .then((ids) => setCollaborativeNoteIds(new Set(ids)))
+      .catch(() => setCollaborativeNoteIds(new Set()));
   }, [loadNotes]);
 
   useEffect(() => {
-    if (showArchive) loadArchived();
+    loadArchived();
   }, [showArchive, loadArchived]);
+
+  // Detect vault folder
+  useEffect(() => {
+    const vf = notes.find((n) => n.title === "__vault__" && n.is_folder && n.parent_id === null);
+    setVaultFolderId(vf?.id ?? null);
+  }, [notes, setVaultFolderId]);
 
   // Load note content when active tab changes
   useEffect(() => {
+    setSaveStatus("idle");
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     if (!activeTabId) {
       setActiveNote(null);
+      setNoteLoading(false);
       return;
     }
-    getNote(activeTabId).then((note) => {
-      setActiveNote(note);
+    setNoteLoading(true);
+    setActiveNote(null);
+    getNote(activeTabId).then(async (note) => {
+      if (!note) { setActiveNote(null); setNoteLoading(false); return; }
+      // Decrypt if encrypted and vault is unlocked
+      if (note.encrypted && vaultKey && isEncryptedPayload(note.content)) {
+        try {
+          const plaintext = await decryptContent(note.content, vaultKey);
+          setActiveNote({ ...note, content: JSON.parse(plaintext) });
+        } catch {
+          console.error("Failed to decrypt note");
+          setActiveNote(null);
+        }
+      } else if (note.encrypted && !vaultKey) {
+        // Vault locked — can't open
+        setActiveNote(null);
+      } else {
+        setActiveNote(note);
+      }
+      setNoteLoading(false);
     });
+  }, [activeTabId, vaultKey]);
+
+  // Reset collaborators immediately when tab changes, then load new ones
+  useEffect(() => {
+    setActiveNoteCollaborators([]);
+    setCollabLoaded(false);
+    if (!activeTabId) {
+      setCollabLoaded(true);
+      return;
+    }
+    getCollaborators(activeTabId)
+      .then((collabs) => {
+        setActiveNoteCollaborators(collabs);
+        // Track which notes have collaborators for sidebar badges
+        setCollaborativeNoteIds((prev) => {
+          const next = new Set(prev);
+          if (collabs.length > 0) {
+            next.add(activeTabId);
+          } else {
+            next.delete(activeTabId);
+          }
+          return next;
+        });
+      })
+      .catch(() => setActiveNoteCollaborators([]))
+      .finally(() => setCollabLoaded(true));
   }, [activeTabId]);
 
   // Sync tab titles when notes change
   useEffect(() => {
     setTabs((prev) =>
       prev.map((tab) => {
-        const note = notes.find((n) => n.id === tab.id);
+        const note = notes.find((n) => n.id === tab.id)
+          ?? sharedWithMeNotes.find((n) => n.id === tab.id);
         return note ? { ...tab, title: note.title } : tab;
       })
     );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notes]);
 
   function openTab(id: string) {
-    const note = notes.find((n) => n.id === id);
-    if (!note) return;
+    // Look up title from all available note sources
+    const note = notes.find((n) => n.id === id)
+      ?? sharedWithMeNotes.find((n) => n.id === id);
+    const title = note?.title ?? "Untitled";
 
     setTabs((prev) => {
       if (prev.some((t) => t.id === id)) return prev;
-      return [...prev, { id: note.id, title: note.title }];
+      return [...prev, { id, title }];
     });
     setActiveTabId(id);
     if (isMobile) setMobileMenuOpen(false);
@@ -164,34 +310,53 @@ export default function AppPage() {
   const handleUpdateContent = useCallback(
     async (content: Json) => {
       if (!activeTabId) return;
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      setSaveStatus("saving");
       try {
-        const updated = await updateNote(activeTabId, { content });
-        setActiveNote(updated);
+        const note = notes.find((n) => n.id === activeTabId);
+        let contentToSave: Json = content;
+        if (note?.encrypted && vaultKey) {
+          const encrypted = await encryptContent(JSON.stringify(content), vaultKey);
+          contentToSave = encrypted as unknown as Json;
+        }
+        const updated = await updateNote(activeTabId, { content: contentToSave });
+        // Keep decrypted content in local state
+        setActiveNote(note?.encrypted ? { ...updated, content } : updated);
         setNotes((prev) =>
           prev.map((n) => (n.id === updated.id ? updated : n))
         );
+        setSaveStatus("saved");
+        saveTimeoutRef.current = setTimeout(() => setSaveStatus("idle"), 2000);
       } catch (err) {
         console.error("Failed to save note:", err);
+        setSaveStatus("idle");
       }
     },
-    [activeTabId]
+    [activeTabId, notes, vaultKey]
   );
 
   const handleCreateNote = useCallback(
     async (parentId?: string | null) => {
+      setCreatingNote(true);
       try {
+        const inVault = parentId
+          ? (parentId === vaultFolderId || isInsideVault(parentId, notes))
+          : false;
         const note = await createNote({
           parent_id: parentId ?? null,
           is_folder: false,
+          encrypted: inVault && vaultStatus === "unlocked",
         });
         setNotes((prev) => [note, ...prev]);
         setTabs((prev) => [...prev, { id: note.id, title: note.title }]);
         setActiveTabId(note.id);
       } catch (err) {
         console.error("Failed to create note:", err);
+      } finally {
+        setCreatingNote(false);
       }
     },
-    []
+    [vaultFolderId, vaultStatus, isInsideVault, notes]
   );
 
   const handleCreateFolder = useCallback(
@@ -203,6 +368,7 @@ export default function AppPage() {
 
   const handleFolderSubmit = useCallback(
     async (name: string) => {
+      setFolderLoading(true);
       try {
         const folder = await createNote({
           title: name,
@@ -210,8 +376,11 @@ export default function AppPage() {
           is_folder: true,
         });
         setNotes((prev) => [folder, ...prev]);
+        setFolderModal({ open: false, parentId: null });
       } catch (err) {
         console.error("Failed to create folder:", err);
+      } finally {
+        setFolderLoading(false);
       }
     },
     [folderModal.parentId]
@@ -219,15 +388,17 @@ export default function AppPage() {
 
   const handleDeleteNote = useCallback(
     (id: string) => {
+      if (id === vaultFolderId) return; // Can't archive vault folder
       const note = notes.find((n) => n.id === id);
       setArchiveModal({ open: true, noteId: id, isFolder: note?.is_folder ?? false });
     },
-    [notes]
+    [notes, vaultFolderId]
   );
 
   const handleArchiveConfirm = useCallback(async () => {
     if (!archiveModal.noteId) return;
     const id = archiveModal.noteId;
+    setArchiveLoading(true);
     try {
       if (archiveModal.isFolder) {
         const archivedIds = await archiveNoteWithChildren(id, notes);
@@ -242,9 +413,14 @@ export default function AppPage() {
         await archiveNote(id);
         setNotes((prev) => prev.filter((n) => n.id !== id));
         closeTab(id);
+        // Notify PartyKit room so collaborators disconnect
+        notifyPartyKitRoom(id, { type: "note-archived" });
       }
+      setArchiveModal({ open: false, noteId: null, isFolder: false });
     } catch (err) {
       console.error("Failed to archive note:", err);
+    } finally {
+      setArchiveLoading(false);
     }
   }, [archiveModal.noteId, archiveModal.isFolder, activeTabId, notes]);
 
@@ -258,12 +434,16 @@ export default function AppPage() {
           await archiveNote(id);
         }
       }
-      // Collect all IDs that were archived (including children of folders)
+      // Collect all IDs that were archived (including all descendants)
       const allArchivedIds = new Set<string>();
+      function collectAll(parentId: string) {
+        allArchivedIds.add(parentId);
+        for (const child of notes.filter((n) => n.parent_id === parentId)) {
+          collectAll(child.id);
+        }
+      }
       for (const id of ids) {
-        allArchivedIds.add(id);
-        // Also remove children of folders
-        notes.filter((n) => n.parent_id === id).forEach((n) => allArchivedIds.add(n.id));
+        collectAll(id);
       }
       setNotes((prev) => prev.filter((n) => !allArchivedIds.has(n.id)));
       setTabs((prev) => prev.filter((t) => !allArchivedIds.has(t.id)));
@@ -306,22 +486,124 @@ export default function AppPage() {
     }
   }, [archivedNotes]);
 
+  // Helper: recursively collect all descendant IDs
+  function collectDescendants(parentId: string): string[] {
+    const ids: string[] = [];
+    const children = notes.filter((n) => n.parent_id === parentId);
+    for (const child of children) {
+      ids.push(child.id);
+      ids.push(...collectDescendants(child.id));
+    }
+    return ids;
+  }
+
   const handleMoveNote = useCallback(
     async (noteId: string, newParentId: string | null) => {
       try {
-        const updated = await updateNote(noteId, { parent_id: newParentId });
-        setNotes((prev) =>
-          prev.map((n) => (n.id === updated.id ? updated : n))
-        );
+        const sourceNote = notes.find((n) => n.id === noteId);
+        if (!sourceNote) return;
+
+        // Block moving shared notes into vault
+        if (sourceNote.shared_token) {
+          const targetIsVault = newParentId === vaultFolderId || (newParentId !== null && isInsideVault(newParentId, notes));
+          if (targetIsVault) {
+            showToast("Shared notes cannot be moved to the vault");
+            return;
+          }
+        }
+
+        // Block moving collaborative notes into vault
+        const targetIsVaultForCollab = newParentId === vaultFolderId || (newParentId !== null && isInsideVault(newParentId, notes));
+        if (targetIsVaultForCollab) {
+          try {
+            const collabs = await getCollaborators(noteId);
+            if (collabs.length > 0) {
+              showToast("Collaborative notes cannot be moved to the vault");
+              return;
+            }
+          } catch {
+            // If we can't check, allow the move
+          }
+        }
+
+        const targetIsVault = newParentId === vaultFolderId || (newParentId !== null && isInsideVault(newParentId, notes));
+        const sourceIsVault = isInsideVault(noteId, notes);
+
+        if (targetIsVault && !sourceNote.encrypted && vaultKey) {
+          // Moving INTO vault — encrypt this note and all descendants
+          if (!sourceNote.is_folder) {
+            const plaintext = JSON.stringify(sourceNote.content ?? null);
+            const encrypted = await encryptContent(plaintext, vaultKey);
+            const updated = await updateNote(noteId, {
+              parent_id: newParentId,
+              content: encrypted as unknown as Json,
+              encrypted: true,
+            });
+            setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+          } else {
+            // Move the folder first
+            const updated = await updateNote(noteId, { parent_id: newParentId, encrypted: true });
+            setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+            // Encrypt all descendant notes
+            const descendants = collectDescendants(noteId);
+            for (const descId of descendants) {
+              const desc = notes.find((n) => n.id === descId);
+              if (desc && !desc.is_folder && !desc.encrypted) {
+                const plaintext = JSON.stringify(desc.content ?? null);
+                const enc = await encryptContent(plaintext, vaultKey);
+                const upd = await updateNote(descId, { content: enc as unknown as Json, encrypted: true });
+                setNotes((prev) => prev.map((n) => (n.id === upd.id ? upd : n)));
+              }
+            }
+          }
+        } else if (!targetIsVault && sourceIsVault && sourceNote.encrypted && vaultKey) {
+          // Moving OUT of vault — decrypt this note and all descendants
+          if (!sourceNote.is_folder) {
+            let content = sourceNote.content;
+            if (isEncryptedPayload(content)) {
+              try {
+                const plaintext = await decryptContent(content, vaultKey);
+                content = JSON.parse(plaintext);
+              } catch {
+                console.error("Failed to decrypt note during move");
+                return;
+              }
+            }
+            const updated = await updateNote(noteId, { parent_id: newParentId, content, encrypted: false });
+            setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+          } else {
+            const updated = await updateNote(noteId, { parent_id: newParentId, encrypted: false });
+            setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+            const descendants = collectDescendants(noteId);
+            for (const descId of descendants) {
+              const desc = notes.find((n) => n.id === descId);
+              if (desc && !desc.is_folder && desc.encrypted && isEncryptedPayload(desc.content)) {
+                try {
+                  const plaintext = await decryptContent(desc.content, vaultKey);
+                  const content = JSON.parse(plaintext);
+                  const upd = await updateNote(descId, { content, encrypted: false });
+                  setNotes((prev) => prev.map((n) => (n.id === upd.id ? upd : n)));
+                } catch {
+                  console.error(`Failed to decrypt descendant ${descId}`);
+                }
+              }
+            }
+          }
+        } else {
+          // Normal move
+          const updated = await updateNote(noteId, { parent_id: newParentId });
+          setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+        }
       } catch (err) {
         console.error("Failed to move note:", err);
       }
     },
-    []
+    [notes, vaultKey, vaultFolderId, isInsideVault]
   );
 
   const handleRenameNote = useCallback(
     async (id: string, title: string) => {
+      if (id === vaultFolderId) return; // Can't rename vault folder
       try {
         const updated = await updateNote(id, { title });
         setNotes((prev) =>
@@ -338,49 +620,322 @@ export default function AppPage() {
   );
 
   const handleDailyNote = useCallback(async () => {
+    setCreatingDailyNote(true);
     const title = todayString();
+    const now = new Date();
+    const yearStr = String(now.getFullYear());
+    const monthStr = now.toLocaleDateString("en-US", { month: "long" });
 
-    // Check if today's daily note already exists
+    // Check if today's daily note already exists anywhere
     const existing = notes.find(
       (n) => n.title === title && !n.is_folder
     );
     if (existing) {
       openTab(existing.id);
+      setCreatingDailyNote(false);
       return;
     }
 
-    // Find or create "Daily Notes" folder
-    let folder = notes.find(
+    // Track newly created folders locally to avoid stale state lookups
+    const created: Note[] = [];
+    const findIn = (predicate: (n: Note) => boolean): Note | undefined =>
+      notes.find(predicate) ?? created.find(predicate);
+
+    // Find or create "Daily Notes" root folder
+    let rootFolder = findIn(
       (n) => n.title === "Daily Notes" && n.is_folder && n.parent_id === null
     );
-    if (!folder) {
+    if (!rootFolder) {
       try {
-        folder = await createNote({
+        rootFolder = await createNote({
           title: "Daily Notes",
           is_folder: true,
           parent_id: null,
         });
-        setNotes((prev) => [folder!, ...prev]);
+        created.push(rootFolder);
       } catch (err) {
         console.error("Failed to create Daily Notes folder:", err);
+        setCreatingDailyNote(false);
         return;
       }
     }
 
-    // Create today's note
+    // Find or create year subfolder (e.g. "2026")
+    let yearFolder = findIn(
+      (n) => n.title === yearStr && n.is_folder && n.parent_id === rootFolder!.id
+    );
+    if (!yearFolder) {
+      try {
+        yearFolder = await createNote({
+          title: yearStr,
+          is_folder: true,
+          parent_id: rootFolder.id,
+        });
+        created.push(yearFolder);
+      } catch (err) {
+        console.error("Failed to create year folder:", err);
+        setCreatingDailyNote(false);
+        return;
+      }
+    }
+
+    // Find or create month subfolder (e.g. "March")
+    let monthFolder = findIn(
+      (n) => n.title === monthStr && n.is_folder && n.parent_id === yearFolder!.id
+    );
+    if (!monthFolder) {
+      try {
+        monthFolder = await createNote({
+          title: monthStr,
+          is_folder: true,
+          parent_id: yearFolder.id,
+        });
+        created.push(monthFolder);
+      } catch (err) {
+        console.error("Failed to create month folder:", err);
+        setCreatingDailyNote(false);
+        return;
+      }
+    }
+
+    // Create today's note inside the month folder
     try {
       const dailyNote = await createNote({
         title,
-        parent_id: folder.id,
+        parent_id: monthFolder.id,
         is_folder: false,
       });
-      setNotes((prev) => [dailyNote, ...prev]);
+      // Batch all new items into state at once
+      setNotes((prev) => [dailyNote, ...created, ...prev]);
       setTabs((prev) => [...prev, { id: dailyNote.id, title: dailyNote.title }]);
       setActiveTabId(dailyNote.id);
     } catch (err) {
       console.error("Failed to create daily note:", err);
+      // Still add any created folders to state
+      if (created.length > 0) {
+        setNotes((prev) => [...created, ...prev]);
+      }
+    } finally {
+      setCreatingDailyNote(false);
     }
   }, [notes]);
+
+  const handlePrepareMeetingNote = useCallback(async (event: CalendarEvent) => {
+    setPreparingNoteForEventId(event.id);
+    try {
+      const noteTitle = `${event.title} – ${new Date(event.startTime).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}`;
+
+      // Check if note already exists
+      const existing = notes.find((n) => n.title === noteTitle && !n.is_folder);
+      if (existing) {
+        openTab(existing.id);
+        return;
+      }
+
+      // Find or create "Meeting Notes" folder
+      let meetingFolder = notes.find(
+        (n) => n.title === "Meeting Notes" && n.is_folder && n.parent_id === null
+      );
+      let createdFolder = false;
+      if (!meetingFolder) {
+        meetingFolder = await createNote({
+          title: "Meeting Notes",
+          is_folder: true,
+          parent_id: null,
+        });
+        createdFolder = true;
+      }
+
+      // Find previous notes from the same recurring meeting series
+      type DocNode = { type: string; attrs?: Record<string, Json>; content?: DocNode[]; marks?: Json[] };
+      let previousMeetingNotes: { id: string; title: string }[] = [];
+      let carryForwardTasks: DocNode[] = [];
+
+      if (event.recurringEventId) {
+        // Find notes in Meeting Notes folder that have matching recurringEventId in their meetingMeta
+        const candidateNotes = notes.filter(
+          (n) => !n.is_folder && n.parent_id === meetingFolder!.id && n.title.startsWith(event.title)
+        );
+
+        for (const candidate of candidateNotes) {
+          const full = await getNote(candidate.id);
+          if (!full?.content) continue;
+          const doc = full.content as { type?: string; content?: DocNode[] };
+          if (doc?.type !== "doc" || !Array.isArray(doc.content)) continue;
+
+          const meta = doc.content.find((node: DocNode) => node.type === "meetingMeta");
+          if (meta?.attrs?.recurringEventId === event.recurringEventId) {
+            previousMeetingNotes.push({ id: candidate.id, title: candidate.title });
+
+            // Extract unchecked tasks from the most recent previous note
+            if (carryForwardTasks.length === 0) {
+              for (const node of doc.content) {
+                if (node.type === "taskList" && Array.isArray(node.content)) {
+                  const unchecked = node.content.filter(
+                    (item: DocNode) => item.type === "taskItem" && item.attrs?.checked === false
+                      && item.content?.some((c: DocNode) =>
+                        c.type === "paragraph" && Array.isArray(c.content) && c.content.length > 0
+                      )
+                  );
+                  carryForwardTasks.push(...unchecked);
+                }
+              }
+            }
+          }
+        }
+
+        // Sort by title (which contains dates) descending so most recent is first
+        previousMeetingNotes.sort((a, b) => b.title.localeCompare(a.title));
+      }
+
+      // Build pre-populated TipTap content
+      const startTime = new Date(event.startTime).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const endTime = new Date(event.endTime).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      const attendeeList = event.attendees
+        .filter((a) => !a.self)
+        .map((a) => a.displayName || a.email);
+
+      const contentNodes: Json[] = [
+        // Hidden metadata node for recurring meeting tracking
+        {
+          type: "meetingMeta",
+          attrs: {
+            eventId: event.id,
+            recurringEventId: event.recurringEventId ?? null,
+            date: event.startTime,
+          },
+        },
+        {
+          type: "heading",
+          attrs: { level: 2 },
+          content: [{ type: "text", text: event.title }],
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", marks: [{ type: "bold" }], text: "Time: " },
+            { type: "text", text: `${startTime} – ${endTime}` },
+          ],
+        },
+      ];
+
+      if (attendeeList.length > 0) {
+        contentNodes.push({
+          type: "paragraph",
+          content: [
+            { type: "text", marks: [{ type: "bold" }], text: "Attendees: " },
+            { type: "text", text: attendeeList.join(", ") },
+          ],
+        });
+      }
+
+      if (event.meetingLink) {
+        contentNodes.push({
+          type: "paragraph",
+          content: [
+            { type: "text", marks: [{ type: "bold" }], text: "Meeting link: " },
+            {
+              type: "text",
+              marks: [{ type: "link", attrs: { href: event.meetingLink } }],
+              text: event.meetingLink,
+            },
+          ],
+        });
+      }
+
+      // Previous meeting notes links
+      if (previousMeetingNotes.length > 0) {
+        contentNodes.push({
+          type: "paragraph",
+          content: [
+            { type: "text", marks: [{ type: "bold" }], text: "Previous notes: " },
+            ...previousMeetingNotes.flatMap((prev, i) => {
+              const nodes: Json[] = [
+                {
+                  type: "text",
+                  marks: [{ type: "link", attrs: { href: `#note:${prev.id}` } }],
+                  text: prev.title,
+                },
+              ];
+              if (i < previousMeetingNotes.length - 1) {
+                nodes.push({ type: "text", text: ", " });
+              }
+              return nodes;
+            }),
+          ],
+        });
+      }
+
+      contentNodes.push(
+        { type: "horizontalRule" },
+        {
+          type: "heading",
+          attrs: { level: 3 },
+          content: [{ type: "text", text: "Notes" }],
+        },
+        { type: "paragraph" },
+      );
+
+      // Carry forward unchecked action items from previous meeting
+      if (carryForwardTasks.length > 0) {
+        contentNodes.push(
+          {
+            type: "heading",
+            attrs: { level: 3 },
+            content: [{ type: "text", text: "Carried Over" }],
+          },
+          {
+            type: "taskList",
+            content: carryForwardTasks as Json[],
+          },
+        );
+      }
+
+      contentNodes.push(
+        {
+          type: "heading",
+          attrs: { level: 3 },
+          content: [{ type: "text", text: "Action Items" }],
+        },
+        {
+          type: "taskList",
+          content: [
+            {
+              type: "taskItem",
+              attrs: { checked: false },
+              content: [{ type: "paragraph" }],
+            },
+          ],
+        }
+      );
+
+      const content: Json = { type: "doc", content: contentNodes };
+
+      const meetingNote = await createNote({
+        title: noteTitle,
+        content,
+        parent_id: meetingFolder.id,
+        is_folder: false,
+      });
+      setNotes((prev) => [meetingNote, ...(createdFolder ? [meetingFolder!] : []), ...prev]);
+      setTabs((prev) => [...prev, { id: meetingNote.id, title: meetingNote.title }]);
+      setActiveTabId(meetingNote.id);
+    } catch (err) {
+      console.error("Failed to create meeting note:", err);
+    } finally {
+      setPreparingNoteForEventId(null);
+    }
+  }, [notes, openTab]);
 
   const handleShare = useCallback(async (): Promise<string> => {
     if (!activeTabId) throw new Error("No active note");
@@ -401,9 +956,42 @@ export default function AppPage() {
     setActiveNote((prev) => (prev ? { ...prev, shared_token: null, shared_at: null } : prev));
   }, [activeTabId]);
 
+  const handleVaultClick = useCallback(() => {
+    if (vaultStatus === "uninitialized") {
+      setVaultSetupOpen(true);
+    } else if (vaultStatus === "locked") {
+      setVaultUnlockOpen(true);
+    }
+    // If unlocked, sidebar handles expand/collapse
+  }, [vaultStatus]);
+
+  const handleVaultSetup = useCallback(async (password: string): Promise<string> => {
+    const supabase = (await import("@/lib/supabase/client")).createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) throw new Error("Not authenticated");
+
+    // Only verify password for email/password users — OAuth-only users are creating a new vault password
+    if (!isOAuthOnlyUser) {
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password,
+      });
+      if (authError) throw new Error("Incorrect password");
+    }
+
+    const recoveryKey = await setupVault(password);
+    // Create vault folder if it doesn't exist
+    if (!vaultFolderId) {
+      const folder = await createNote({ title: "__vault__", is_folder: true, parent_id: null });
+      setNotes((prev) => [folder, ...prev]);
+    }
+    return recoveryKey;
+  }, [setupVault, vaultFolderId, isOAuthOnlyUser]);
+
   const handleImageUpload = useCallback(async (file: File) => {
-    return uploadImage(file);
-  }, []);
+    const isCollab = activeNoteCollaborators.length > 0;
+    return uploadImage(file, isCollab ? { noteId: activeTabId ?? undefined, isCollaborative: true } : undefined);
+  }, [activeNoteCollaborators, activeTabId]);
 
   if (loading) {
     return (
@@ -432,19 +1020,26 @@ export default function AppPage() {
         isMobile={isMobile}
         mobileMenuOpen={mobileMenuOpen}
         onCloseMobileMenu={() => setMobileMenuOpen(false)}
+        vaultStatus={vaultStatus}
+        vaultFolderId={vaultFolderId}
+        onVaultClick={handleVaultClick}
+        onVaultLock={lock}
+        creatingNote={creatingNote}
+        creatingDailyNote={creatingDailyNote}
+        sharedWithMeNotes={sharedWithMeNotes}
+        collaborativeNoteIds={collaborativeNoteIds}
       />
 
-      {showArchive && (
-        <ArchivePanel
-          notes={archivedNotes}
-          onRestore={handleRestore}
-          onPermanentDelete={handlePermanentDelete}
-          onPermanentDeleteAll={handlePermanentDeleteAll}
-          onClose={() => setShowArchive(false)}
-        />
-      )}
-
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative">
+        {showArchive && (
+          <ArchivePanel
+            notes={archivedNotes}
+            onRestore={handleRestore}
+            onPermanentDelete={handlePermanentDelete}
+            onPermanentDeleteAll={handlePermanentDeleteAll}
+            onClose={() => setShowArchive(false)}
+          />
+        )}
         {isMobile && (
           <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950">
             <button
@@ -471,7 +1066,12 @@ export default function AppPage() {
           onCloseAll={closeAllTabs}
           onRenameNote={handleRenameNote}
         />
-        {activeNote ? (
+        {noteLoading || (activeNote && !collabLoaded) ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 size={20} className="animate-spin text-stone-300 dark:text-stone-700" />
+          </div>
+        ) : activeNote ? (
+          <EditorErrorBoundary>
           <NoteEditor
             noteId={activeNote.id}
             content={activeNote.content}
@@ -481,51 +1081,55 @@ export default function AppPage() {
             onSelectNote={openTab}
             sharedToken={activeNote.shared_token}
             sharedAt={activeNote.shared_at}
+            isEncrypted={activeNote.encrypted}
             onShare={handleShare}
             onUnshare={handleUnshare}
+            saveStatus={saveStatus}
+            isCollaborative={activeNoteCollaborators.length > 0 && !!process.env.NEXT_PUBLIC_PARTYKIT_HOST}
+            collaboratorRole={
+              activeNote.user_id === currentUserId
+                ? "owner"
+                : activeNoteCollaborators.find((c) => c.user_id === currentUserId)?.role ?? null
+            }
+            currentUserId={currentUserId ?? undefined}
+            currentUserEmail={currentUserEmail ?? undefined}
+            currentUserDisplayName={userName ?? undefined}
+            isOwner={activeNote.user_id === currentUserId}
+            isInsideVault={isInsideVault(activeNote.id, notes)}
+            collaborators={activeNoteCollaborators}
+            onCollaboratorsChange={(collabs) => {
+              setActiveNoteCollaborators(collabs);
+              setCollaborativeNoteIds((prev) => {
+                const next = new Set(prev);
+                if (collabs.length > 0) next.add(activeNote.id);
+                else next.delete(activeNote.id);
+                return next;
+              });
+            }}
           />
+          </EditorErrorBoundary>
         ) : notes.length === 0 ? (
           <Welcome
             onCreateNote={() => handleCreateNote()}
             onDailyNote={handleDailyNote}
           />
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center px-4">
-            <div className="max-w-sm w-full space-y-6 text-center">
-              <div className="text-stone-300 dark:text-stone-700">
-                <FileText size={48} strokeWidth={1} className="mx-auto" />
-              </div>
-              <p className="text-sm text-stone-400 dark:text-stone-500">
-                Select a note from the sidebar, or use a shortcut:
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-left text-xs">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
-                  <Command size={12} className="shrink-0" />
-                  <span><kbd className="font-mono bg-stone-200 dark:bg-stone-800 rounded px-1">Ctrl+K</kbd> Command palette</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
-                  <Slash size={12} className="shrink-0" />
-                  <span><kbd className="font-mono bg-stone-200 dark:bg-stone-800 rounded px-1">/</kbd> Slash commands</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
-                  <Link2 size={12} className="shrink-0" />
-                  <span><kbd className="font-mono bg-stone-200 dark:bg-stone-800 rounded px-1">[[</kbd> Link notes</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
-                  <CalendarDays size={12} className="shrink-0" />
-                  <span>Daily note</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
-                  <MousePointer2 size={12} className="shrink-0" />
-                  <span>Double-click to rename</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-stone-50 dark:bg-stone-900 text-stone-500 dark:text-stone-400">
-                  <GripVertical size={12} className="shrink-0" />
-                  <span>Drag to organize</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Dashboard
+            notes={notes}
+            onSelectNote={openTab}
+            onCreateNote={() => handleCreateNote()}
+            onDailyNote={handleDailyNote}
+            creatingNote={creatingNote}
+            creatingDailyNote={creatingDailyNote}
+            vaultStatus={vaultStatus}
+            onVaultUnlock={handleVaultClick}
+            userName={userName}
+            isGoogleUser={hasGoogle}
+            onPrepareMeetingNote={handlePrepareMeetingNote}
+            preparingNoteForEventId={preparingNoteForEventId}
+            collaborativeNoteIds={collaborativeNoteIds}
+            sharedWithMeNotes={sharedWithMeNotes}
+          />
         )}
       </main>
 
@@ -536,6 +1140,7 @@ export default function AppPage() {
         title="New folder"
         placeholder="Folder name"
         submitLabel="Create"
+        loading={folderLoading}
       />
 
       <CommandPalette
@@ -559,7 +1164,30 @@ export default function AppPage() {
         }
         confirmLabel="Archive"
         danger
+        loading={archiveLoading}
       />
+
+      <VaultSetupModal
+        open={vaultSetupOpen}
+        onClose={() => setVaultSetupOpen(false)}
+        onSetup={handleVaultSetup}
+        isOAuthUser={isOAuthOnlyUser}
+      />
+
+      <VaultUnlockModal
+        open={vaultUnlockOpen}
+        onClose={() => setVaultUnlockOpen(false)}
+        onUnlock={unlock}
+        onRecover={recoverVault}
+        isOAuthUser={isOAuthOnlyUser}
+      />
+
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-sm shadow-lg animate-[fadeIn_150ms_ease-out]">
+          {toast}
+        </div>
+      )}
     </>
   );
 }

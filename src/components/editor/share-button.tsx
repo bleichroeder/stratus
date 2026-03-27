@@ -7,6 +7,7 @@ interface ShareButtonProps {
   noteId: string;
   sharedToken: string | null;
   sharedAt: string | null;
+  isEncrypted?: boolean;
   onShare: () => Promise<string>;
   onUnshare: () => void;
 }
@@ -18,7 +19,7 @@ function daysUntilExpiry(sharedAt: string | null): number {
   return Math.max(0, Math.ceil((expiry - Date.now()) / (24 * 60 * 60 * 1000)));
 }
 
-export function ShareButton({ noteId, sharedToken, sharedAt, onShare, onUnshare }: ShareButtonProps) {
+export function ShareButton({ noteId, sharedToken, sharedAt, isEncrypted = false, onShare, onUnshare }: ShareButtonProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -70,13 +71,15 @@ export function ShareButton({ noteId, sharedToken, sharedAt, onShare, onUnshare 
   return (
     <div className="relative" ref={popoverRef}>
       <button
-        onClick={() => setOpen((v) => !v)}
-        className={`p-1.5 rounded hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors ${
-          sharedToken
-            ? "text-blue-600 dark:text-blue-400"
-            : "text-stone-600 dark:text-stone-400"
+        onClick={() => { if (!isEncrypted) setOpen((v) => !v); }}
+        className={`p-1.5 rounded transition-colors ${
+          isEncrypted
+            ? "text-stone-300 dark:text-stone-600 cursor-not-allowed"
+            : sharedToken
+              ? "text-blue-600 dark:text-blue-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+              : "text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
         }`}
-        title={sharedToken ? "Sharing enabled" : "Share note"}
+        title={isEncrypted ? "Encrypted notes cannot be shared" : sharedToken ? "Sharing enabled" : "Share note"}
       >
         <Share2 size={16} />
       </button>

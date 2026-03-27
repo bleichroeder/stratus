@@ -11,6 +11,8 @@ import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { common, createLowlight } from "lowlight";
 import { WikiLink } from "@/components/editor/wiki-link";
 import { SketchBlockStatic } from "@/components/editor/sketch/sketch-node-static";
+import { CalloutBlockStatic } from "@/components/editor/callout/callout-node-static";
+import { MermaidBlockStatic } from "@/components/editor/mermaid/mermaid-node-static";
 
 const lowlight = createLowlight(common);
 const SHARE_EXPIRY_DAYS = 7;
@@ -25,12 +27,31 @@ export default async function SharedNotePage({
   const supabase = createServiceClient();
   const { data: note, error } = await supabase
     .from("notes")
-    .select("id, title, content, shared_at, created_at, updated_at")
+    .select("id, title, content, shared_at, encrypted, created_at, updated_at")
     .eq("shared_token", token)
     .single();
 
   if (error || !note) {
     notFound();
+  }
+
+  // Encrypted notes cannot be viewed publicly
+  if (note.encrypted) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-stone-950 flex items-center justify-center">
+        <div className="text-center space-y-3 px-4">
+          <h1 className="text-2xl font-bold text-stone-900 dark:text-stone-100">
+            Encrypted note
+          </h1>
+          <p className="text-sm text-stone-500 dark:text-stone-400 max-w-sm">
+            This note is encrypted and cannot be viewed via a shared link.
+          </p>
+          <p className="text-xs text-stone-400 dark:text-stone-500">
+            Shared via <span className="font-mono font-semibold">stratus</span>
+          </p>
+        </div>
+      </div>
+    );
   }
 
   // Check expiry
@@ -76,6 +97,8 @@ export default async function SharedNotePage({
         CodeBlockLowlight.configure({ lowlight }),
         WikiLink,
         SketchBlockStatic,
+        CalloutBlockStatic,
+        MermaidBlockStatic,
       ]);
     } catch {
       html = "<p>Unable to render this note.</p>";

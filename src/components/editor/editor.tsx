@@ -18,9 +18,18 @@ import { WikiLink, createWikiLinkPlugin } from "./wiki-link";
 import { WikiLinkSuggest } from "./wiki-link-suggest";
 import { Backlinks } from "./backlinks";
 import { SketchBlock } from "./sketch/sketch-node";
+import { CalloutBlock } from "./callout/callout-node";
+import { MeetingMeta } from "./meeting-meta";
 import type { Json } from "@/lib/types";
 import type { Note } from "@/lib/types";
 import { ShareButton } from "./share-button";
+import { StatusBar } from "./status-bar";
+import { useCollaboration } from "@/lib/yjs/useCollaboration";
+import { getUserColor } from "@/lib/yjs/awareness";
+import { CollaborateButton } from "./collaborate-button";
+import { PresenceAvatars } from "./presence-avatars";
+import type { NoteCollaborator } from "@/lib/types";
+import "./cursor-styles.css";
 
 const lowlight = createLowlight(common);
 
@@ -33,14 +42,48 @@ interface NoteEditorProps {
   onSelectNote: (id: string) => void;
   sharedToken?: string | null;
   sharedAt?: string | null;
+  isEncrypted?: boolean;
   onShare?: () => Promise<string>;
   onUnshare?: () => void;
+  saveStatus?: "idle" | "saving" | "saved";
+  isCollaborative?: boolean;
+  collaboratorRole?: "owner" | "editor" | "viewer" | null;
+  currentUserId?: string;
+  currentUserEmail?: string;
+  currentUserDisplayName?: string;
+  isOwner?: boolean;
+  isInsideVault?: boolean;
+  collaborators?: NoteCollaborator[];
+  onCollaboratorsChange?: (collaborators: NoteCollaborator[]) => void;
 }
 
-export function NoteEditor({ noteId, content, onUpdate, onImageUpload, notes, onSelectNote, sharedToken, sharedAt, onShare, onUnshare }: NoteEditorProps) {
+export function NoteEditor({
+  noteId,
+  content,
+  onUpdate,
+  onImageUpload,
+  notes,
+  onSelectNote,
+  sharedToken,
+  sharedAt,
+  isEncrypted = false,
+  onShare,
+  onUnshare,
+  saveStatus = "idle",
+  isCollaborative = false,
+  collaboratorRole,
+  currentUserId,
+  currentUserEmail,
+  currentUserDisplayName,
+  isOwner = true,
+  isInsideVault = false,
+  collaborators = [],
+  onCollaboratorsChange,
+}: NoteEditorProps) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const noteIdRef = useRef(noteId);
   const onUpdateRef = useRef(onUpdate);
+  const isCollaborativeRef = useRef(isCollaborative);
 
   // Wiki link suggest state
   const [wikiSuggest, setWikiSuggest] = useState<{
@@ -53,147 +96,203 @@ export function NoteEditor({ noteId, content, onUpdate, onImageUpload, notes, on
 
   onUpdateRef.current = onUpdate;
   noteIdRef.current = noteId;
+  isCollaborativeRef.current = isCollaborative;
 
-  const editor = useEditor({
-    immediatelyRender: false,
-    extensions: [
-      StarterKit.configure({
-        codeBlock: false,
-      }),
-      Placeholder.configure({
-        placeholder: 'Start writing... Type "/" for commands',
-      }),
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-      }),
-      Image.configure({
-        allowBase64: true,
-        HTMLAttributes: {
-          class: "rounded-lg max-w-full",
-        },
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: "text-blue-600 underline cursor-pointer hover:text-blue-800",
-        },
-      }),
-      Underline,
-      CodeBlockLowlight.configure({
-        lowlight,
-      }),
-      Typography,
-      SlashCommands,
-      WikiLink,
-      SketchBlock,
-    ],
-    content: content as Record<string, unknown> | undefined,
-    editorProps: {
-      attributes: {
-        class:
-          "prose prose-stone max-w-none focus:outline-none min-h-[calc(100vh-12rem)] px-4 py-3 md:px-8 md:py-4",
-        spellcheck: "true",
-        autocorrect: "on",
+  // Collaboration hook — only active when isCollaborative is true
+  const { ydoc, provider, connectionStatus, collabExtensions } = useCollaboration({
+    noteId,
+    isCollaborative,
+    userName: currentUserDisplayName || currentUserEmail,
+    userColor: getUserColor(currentUserId ?? ""),
+  });
+
+  // Only treat as collaborative once Yjs extensions are loaded
+  const collabReady = isCollaborative && collabExtensions.length > 0;
+
+  // Build extensions list — collaboration extensions added conditionally
+  const extensions = [
+    StarterKit.configure({
+      codeBlock: false,
+      // Disable built-in history when collaborative (Yjs has its own undo manager)
+      ...(collabReady ? { history: false } : {}),
+    }),
+    Placeholder.configure({
+      placeholder: 'Start writing... Type "/" for commands',
+    }),
+    TaskList,
+    TaskItem.configure({
+      nested: true,
+    }),
+    Image.configure({
+      allowBase64: true,
+      HTMLAttributes: {
+        class: "rounded-lg max-w-full",
       },
-      handleDrop: (view, event, _slice, moved) => {
-        if (!moved && event.dataTransfer?.files.length) {
-          const file = event.dataTransfer.files[0];
-          if (file.type.startsWith("image/") && onImageUpload) {
-            event.preventDefault();
-            onImageUpload(file).then((url) => {
-              if (url) {
-                const { tr } = view.state;
-                const pos = view.posAtCoords({
-                  left: event.clientX,
-                  top: event.clientY,
-                })?.pos;
-                if (pos !== undefined) {
-                  const node = view.state.schema.nodes.image.create({ src: url });
-                  view.dispatch(tr.insert(pos, node));
-                }
-              }
-            });
-            return true;
-          }
-        }
-        return false;
+    }),
+    Link.configure({
+      openOnClick: false,
+      HTMLAttributes: {
+        class: "text-blue-600 underline cursor-pointer hover:text-blue-800",
       },
-      handlePaste: (view, event) => {
-        const items = event.clipboardData?.items;
-        if (items) {
-          for (const item of Array.from(items)) {
-            if (item.type.startsWith("image/") && onImageUpload) {
+    }),
+    Underline,
+    CodeBlockLowlight.configure({
+      lowlight,
+    }),
+    Typography,
+    SlashCommands,
+    WikiLink,
+    SketchBlock,
+    CalloutBlock,
+    MeetingMeta,
+    // Collaboration extensions (dynamically loaded by useCollaboration hook)
+    ...collabExtensions,
+  ];
+
+  const editor = useEditor(
+    {
+      immediatelyRender: false,
+      extensions,
+      // When collaborative AND Yjs extensions are loaded, content comes from Yjs
+      content: collabReady
+        ? undefined
+        : (content as Record<string, unknown> | undefined),
+      editable: collaboratorRole !== "viewer",
+      editorProps: {
+        attributes: {
+          class:
+            "prose prose-stone max-w-none focus:outline-none min-h-[calc(100vh-12rem)] px-4 py-3 md:px-8 md:py-4",
+          spellcheck: "true",
+          autocorrect: "on",
+        },
+        handleDrop: (view, event, _slice, moved) => {
+          if (!moved && event.dataTransfer?.files.length) {
+            const file = event.dataTransfer.files[0];
+            if (file.type.startsWith("image/") && onImageUpload) {
               event.preventDefault();
-              const file = item.getAsFile();
-              if (file) {
-                onImageUpload(file).then((url) => {
-                  if (url) {
-                    const node = view.state.schema.nodes.image.create({ src: url });
-                    const tr = view.state.tr.replaceSelectionWith(node);
-                    view.dispatch(tr);
+              onImageUpload(file).then((url) => {
+                if (url) {
+                  const { tr } = view.state;
+                  const pos = view.posAtCoords({
+                    left: event.clientX,
+                    top: event.clientY,
+                  })?.pos;
+                  if (pos !== undefined) {
+                    const node = view.state.schema.nodes.image.create({
+                      src: url,
+                    });
+                    view.dispatch(tr.insert(pos, node));
                   }
-                });
-              }
+                }
+              });
               return true;
             }
           }
-        }
-        return false;
-      },
-      handleClick: (view, _pos, event) => {
-        // Handle wiki link clicks
-        const target = event.target as HTMLElement;
-        const wikiLink = target.closest('[data-type="wiki-link"]');
-        if (wikiLink) {
-          const linkNoteId = wikiLink.getAttribute("data-note-id");
-          if (linkNoteId) {
-            onSelectNote(linkNoteId);
-            return true;
+          return false;
+        },
+        handlePaste: (view, event) => {
+          const items = event.clipboardData?.items;
+          if (items) {
+            for (const item of Array.from(items)) {
+              if (item.type.startsWith("image/") && onImageUpload) {
+                event.preventDefault();
+                const file = item.getAsFile();
+                if (file) {
+                  onImageUpload(file).then((url) => {
+                    if (url) {
+                      const node = view.state.schema.nodes.image.create({
+                        src: url,
+                      });
+                      const tr = view.state.tr.replaceSelectionWith(node);
+                      view.dispatch(tr);
+                    }
+                  });
+                }
+                return true;
+              }
+            }
           }
+          return false;
+        },
+        handleClick: (view, _pos, event) => {
+          const target = event.target as HTMLElement;
+          const wikiLink = target.closest('[data-type="wiki-link"]');
+          if (wikiLink) {
+            const linkNoteId = wikiLink.getAttribute("data-note-id");
+            if (linkNoteId) {
+              onSelectNote(linkNoteId);
+              return true;
+            }
+          }
+          return false;
+        },
+      },
+      onUpdate: ({ editor }) => {
+        // Skip debounced save for collaborative notes — Yjs handles sync,
+        // and the client saves to Supabase periodically for search/share compat
+        if (!isCollaborativeRef.current) {
+          if (debounceTimer.current) clearTimeout(debounceTimer.current);
+          const savedNoteId = noteIdRef.current;
+          debounceTimer.current = setTimeout(() => {
+            if (noteIdRef.current === savedNoteId) {
+              onUpdateRef.current(editor.getJSON() as Json);
+            }
+          }, 500);
         }
-        return false;
+
+        // Check for [[ pattern (wiki link suggest)
+        const { $from } = editor.state.selection;
+        const textBefore = $from.parent.textBetween(
+          Math.max(0, $from.parentOffset - 50),
+          $from.parentOffset,
+          undefined,
+          "\ufffc"
+        );
+        const match = textBefore.match(/\[\[([^\]]*?)$/);
+        if (match) {
+          const coords = editor.view.coordsAtPos($from.pos);
+          setWikiSuggest({
+            open: true,
+            query: match[1],
+            from: $from.pos - match[0].length,
+            to: $from.pos,
+            position: { top: coords.top, left: coords.left },
+          });
+        } else if (wikiSuggest.open) {
+          setWikiSuggest((prev) => ({ ...prev, open: false }));
+        }
       },
     },
-    onUpdate: ({ editor }) => {
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
-      const savedNoteId = noteIdRef.current;
-      debounceTimer.current = setTimeout(() => {
-        if (noteIdRef.current === savedNoteId) {
-          onUpdateRef.current(editor.getJSON() as Json);
-        }
-      }, 500);
+    // Re-create editor when collaboration state changes
+    [collabReady, collabExtensions]
+  );
 
-      // Check for [[ pattern
-      const { $from } = editor.state.selection;
-      const textBefore = $from.parent.textBetween(
-        Math.max(0, $from.parentOffset - 50),
-        $from.parentOffset,
-        undefined,
-        "\ufffc"
-      );
-      const match = textBefore.match(/\[\[([^\]]*?)$/);
-      if (match) {
-        const coords = editor.view.coordsAtPos($from.pos);
-        setWikiSuggest({
-          open: true,
-          query: match[1],
-          from: $from.pos - match[0].length,
-          to: $from.pos,
-          position: { top: coords.top, left: coords.left },
-        });
-      } else if (wikiSuggest.open) {
-        setWikiSuggest((prev) => ({ ...prev, open: false }));
+  // Periodic Supabase save for collaborative notes (keeps search/share in sync)
+  useEffect(() => {
+    if (!isCollaborative || !editor) return;
+    const interval = setInterval(() => {
+      if (editor && noteIdRef.current) {
+        onUpdateRef.current(editor.getJSON() as Json);
       }
-    },
-  });
+    }, 10000); // Save every 10 seconds
+    return () => clearInterval(interval);
+  }, [isCollaborative, editor]);
+
+  // Save to Supabase on unmount for collaborative notes
+  useEffect(() => {
+    if (!isCollaborative || !editor) return;
+    return () => {
+      if (editor && noteIdRef.current) {
+        onUpdateRef.current(editor.getJSON() as Json);
+      }
+    };
+  }, [isCollaborative, editor]);
 
   const handleWikiSelect = useCallback(
     (note: Note) => {
       if (!editor) return;
       const { from, to } = wikiSuggest;
 
-      // Delete the [[ and query text, insert the wiki link then unset the mark
       editor
         .chain()
         .focus()
@@ -217,39 +316,81 @@ export function NoteEditor({ noteId, content, onUpdate, onImageUpload, notes, on
     [editor, wikiSuggest]
   );
 
-  // When the noteId changes, cancel any pending save and load new content
+  // When the noteId changes on non-collaborative notes, load new content
   useEffect(() => {
+    if (isCollaborative) return; // Yjs handles content for collaborative notes
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
       debounceTimer.current = null;
     }
     if (editor) {
-      editor.commands.setContent(
-        content ? (content as Record<string, unknown>) : { type: "doc", content: [] }
-      );
+      setTimeout(() => {
+        editor.commands.setContent(
+          content
+            ? (content as Record<string, unknown>)
+            : { type: "doc", content: [] }
+        );
+      }, 0);
     }
     setWikiSuggest((prev) => ({ ...prev, open: false }));
   }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update editable state when role changes
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(collaboratorRole !== "viewer");
+    }
+  }, [editor, collaboratorRole]);
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center border-b border-stone-200 dark:border-stone-800">
         <div className="flex-1 border-b-0">
-          <EditorToolbar editor={editor} onImageUpload={onImageUpload} />
+          <EditorToolbar
+            editor={editor}
+            onImageUpload={onImageUpload}
+            disabled={collaboratorRole === "viewer"}
+          />
         </div>
+        {/* Presence avatars for collaborative notes */}
+        {isCollaborative && (
+          <PresenceAvatars provider={provider} />
+        )}
+        {/* Collaborate button */}
+        {onCollaboratorsChange && (
+          <div className="px-1 bg-white dark:bg-stone-950">
+            <CollaborateButton
+              noteId={noteId}
+              isEncrypted={isEncrypted}
+              isInsideVault={isInsideVault}
+              isOwner={isOwner}
+              collaborators={collaborators}
+              onCollaboratorsChange={onCollaboratorsChange}
+            />
+          </div>
+        )}
         {onShare && onUnshare && (
           <div className="px-2 bg-white dark:bg-stone-950">
             <ShareButton
               noteId={noteId}
               sharedToken={sharedToken ?? null}
               sharedAt={sharedAt ?? null}
+              isEncrypted={isEncrypted}
               onShare={onShare}
               onUnshare={onUnshare}
             />
           </div>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto relative">
+        {/* Viewer badge */}
+        {collaboratorRole === "viewer" && (
+          <div className="sticky top-0 z-10 flex justify-center py-1">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700">
+              View only
+            </span>
+          </div>
+        )}
         <EditorContent editor={editor} />
         <Backlinks
           currentNoteId={noteId}
@@ -257,13 +398,22 @@ export function NoteEditor({ noteId, content, onUpdate, onImageUpload, notes, on
           onSelectNote={onSelectNote}
         />
       </div>
+      <StatusBar
+        editor={editor}
+        saveStatus={saveStatus}
+        isCollaborative={isCollaborative}
+        connectionStatus={connectionStatus}
+        collaboratorRole={collaboratorRole}
+      />
       <WikiLinkSuggest
         open={wikiSuggest.open}
         query={wikiSuggest.query}
         notes={notes}
         position={wikiSuggest.position}
         onSelect={handleWikiSelect}
-        onClose={() => setWikiSuggest((prev) => ({ ...prev, open: false }))}
+        onClose={() =>
+          setWikiSuggest((prev) => ({ ...prev, open: false }))
+        }
       />
     </div>
   );

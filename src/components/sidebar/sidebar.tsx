@@ -19,7 +19,13 @@ import {
   Pencil,
   Archive,
   CalendarDays,
+  Plus,
+  Lock,
+  LockOpen,
+  Loader2,
+  Users,
 } from "lucide-react";
+import type { VaultStatus } from "@/components/vault/vault-context";
 import type { Note } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -44,6 +50,14 @@ interface SidebarProps {
   isMobile?: boolean;
   mobileMenuOpen?: boolean;
   onCloseMobileMenu?: () => void;
+  vaultStatus?: VaultStatus;
+  vaultFolderId?: string | null;
+  onVaultClick?: () => void;
+  onVaultLock?: () => void;
+  creatingNote?: boolean;
+  creatingDailyNote?: boolean;
+  sharedWithMeNotes?: Note[];
+  collaborativeNoteIds?: Set<string>;
 }
 
 function NoteTreeItem({
@@ -67,6 +81,7 @@ function NoteTreeItem({
   onDragOver,
   onDragLeave,
   onDrop,
+  collaborativeNoteIds,
 }: {
   note: Note;
   notes: Note[];
@@ -88,6 +103,7 @@ function NoteTreeItem({
   onDragOver: (e: React.DragEvent, targetId: string) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string) => void;
+  collaborativeNoteIds: Set<string>;
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(note.title);
@@ -136,11 +152,11 @@ function NoteTreeItem({
         onDrop={(e) => {
           if (note.is_folder) onDrop(e, note.id);
         }}
-        className={`group flex items-center gap-1 py-1 px-2 cursor-pointer rounded-md text-sm transition-colors
+        className={`group relative flex items-center gap-1 py-1 px-2 cursor-pointer text-sm transition-colors
           ${isDragged ? "opacity-40" : ""}
           ${isDropTarget ? "bg-blue-100 dark:bg-blue-900/30 ring-1 ring-blue-400 dark:ring-blue-500" : ""}
-          ${isSelected && !isDropTarget ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-l-2 border-blue-400 dark:border-blue-500 rounded-none" : ""}
-          ${!isDropTarget && !isSelected && !isDragged ? (isActive ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100" : "hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400") : ""}
+          ${isSelected && !isDropTarget ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border-l-2 border-blue-400 dark:border-blue-500" : ""}
+          ${!isDropTarget && !isSelected && !isDragged ? (isActive ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100 border-l-2 border-stone-500 dark:border-stone-400" : "hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400") : ""}
         `}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}
         onClick={(e) => {
@@ -161,6 +177,14 @@ function NoteTreeItem({
           startRename();
         }}
       >
+        {/* Tree guide lines */}
+        {depth > 0 && Array.from({ length: depth }, (_, i) => (
+          <span
+            key={i}
+            className="absolute top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-700/60"
+            style={{ left: `${i * 16 + 16}px` }}
+          />
+        ))}
         {note.is_folder ? (
           <>
             {isExpanded ? (
@@ -194,7 +218,12 @@ function NoteTreeItem({
             className="flex-1 min-w-0 bg-white dark:bg-stone-800 border border-stone-300 dark:border-stone-600 rounded px-1 py-0 text-sm text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-1 focus:ring-stone-500"
           />
         ) : (
-          <span className="truncate flex-1">{note.title}</span>
+          <>
+            <span className="truncate flex-1">{note.title}</span>
+            {!note.is_folder && collaborativeNoteIds.has(note.id) && (
+              <Users size={10} className="shrink-0 text-blue-500 dark:text-blue-400" />
+            )}
+          </>
         )}
         {!editing && (
           <div className="hidden group-hover:flex items-center gap-0.5">
@@ -267,6 +296,7 @@ function NoteTreeItem({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
+          collaborativeNoteIds={collaborativeNoteIds}
         />
       )}
     </div>
@@ -294,6 +324,7 @@ function NoteTree({
   onDragOver,
   onDragLeave,
   onDrop,
+  collaborativeNoteIds,
 }: {
   notes: Note[];
   parentId?: string | null;
@@ -315,6 +346,7 @@ function NoteTree({
   onDragOver: (e: React.DragEvent, targetId: string) => void;
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string) => void;
+  collaborativeNoteIds: Set<string>;
 }) {
   const children = notes.filter((n) => n.parent_id === parentId);
   const sorted = [...children].sort((a, b) => {
@@ -348,6 +380,7 @@ function NoteTree({
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
+          collaborativeNoteIds={collaborativeNoteIds}
         />
       ))}
     </div>
@@ -371,10 +404,19 @@ export function Sidebar({
   isMobile = false,
   mobileMenuOpen = false,
   onCloseMobileMenu,
+  vaultStatus = "uninitialized",
+  vaultFolderId = null,
+  onVaultClick,
+  onVaultLock,
+  creatingNote = false,
+  creatingDailyNote = false,
+  sharedWithMeNotes = [],
+  collaborativeNoteIds = new Set(),
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [collabExpanded, setCollabExpanded] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -447,7 +489,38 @@ export function Sidebar({
     });
   }
 
+  // Auto-expand ancestor folders when a note is opened
+  useEffect(() => {
+    if (!activeNoteId) return;
+    const note = notes.find((n) => n.id === activeNoteId);
+    if (!note || !note.parent_id) return;
+
+    // Walk up the tree and collect all ancestor folder IDs
+    const ancestors: string[] = [];
+    let currentId: string | null = note.parent_id;
+    while (currentId) {
+      ancestors.push(currentId);
+      const parent = notes.find((n) => n.id === currentId);
+      currentId = parent?.parent_id ?? null;
+    }
+
+    if (ancestors.length === 0) return;
+
+    setExpandedFolders((prev) => {
+      const allExpanded = ancestors.every((id) => prev.has(id));
+      if (allExpanded) return prev; // No change needed
+      const next = new Set(prev);
+      for (const id of ancestors) {
+        next.add(id);
+      }
+      return next;
+    });
+  }, [activeNoteId, notes]);
+
+  const [loggingOut, setLoggingOut] = useState(false);
+
   async function handleLogout() {
+    setLoggingOut(true);
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
@@ -538,6 +611,31 @@ export function Sidebar({
       )
     : notes;
 
+  // Separate vault notes from main tree
+  const isVaultDescendant = useCallback((noteId: string): boolean => {
+    if (!vaultFolderId) return false;
+    let current: string | null = noteId;
+    while (current) {
+      if (current === vaultFolderId) return true;
+      const n = notes.find((note) => note.id === current);
+      if (!n?.parent_id) return false;
+      current = n.parent_id;
+    }
+    return false;
+  }, [vaultFolderId, notes]);
+
+  const vaultFolder = notes.find((n) => n.id === vaultFolderId);
+  const vaultNotes = vaultFolderId ? notes.filter((n) => isVaultDescendant(n.id) && n.id !== vaultFolderId) : [];
+  const sharedWithMeIds = new Set(sharedWithMeNotes.map((n) => n.id));
+  const mainNotes = filteredNotes.filter((n) => n.id !== vaultFolderId && !isVaultDescendant(n.id) && !sharedWithMeIds.has(n.id) && !collaborativeNoteIds.has(n.id));
+  const [vaultExpanded, setVaultExpanded] = useState(vaultStatus === "unlocked");
+
+  // Auto-expand vault when unlocked
+  useEffect(() => {
+    if (vaultStatus === "unlocked") setVaultExpanded(true);
+    if (vaultStatus === "locked") setVaultExpanded(false);
+  }, [vaultStatus]);
+
   const isRootDropTarget = dropTargetId === "__root__";
 
   // On mobile, hide sidebar when menu is closed
@@ -556,17 +654,26 @@ export function Sidebar({
         </button>
         <button
           onClick={() => onCreateNote()}
-          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400"
+          disabled={creatingNote}
+          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 disabled:opacity-50"
           title="New note"
         >
-          <FilePlus size={16} />
+          {creatingNote ? <Loader2 size={16} className="animate-spin" /> : <FilePlus size={16} />}
         </button>
         <button
           onClick={onDailyNote}
-          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400"
-          title="Daily note"
+          disabled={creatingDailyNote}
+          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 disabled:opacity-50"
+          title="New daily note"
         >
-          <CalendarDays size={16} />
+          {creatingDailyNote ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <div className="relative">
+              <CalendarDays size={16} />
+              <Plus size={8} strokeWidth={3} className="absolute -top-1 -right-1.5 text-stone-500 dark:text-stone-400" />
+            </div>
+          )}
         </button>
         <div className="flex-1" />
         <button
@@ -578,10 +685,11 @@ export function Sidebar({
         </button>
         <button
           onClick={handleLogout}
-          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400"
+          disabled={loggingOut}
+          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 disabled:opacity-50"
           title="Sign out"
         >
-          <LogOut size={16} />
+          {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
         </button>
       </div>
     );
@@ -616,14 +724,169 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Vault section */}
+      {(vaultFolder || vaultStatus === "uninitialized") && (
+        <div className="border-b border-stone-200 dark:border-stone-800">
+          <div
+            className={`flex items-center gap-2 px-3 py-2 cursor-pointer text-sm transition-colors ${
+              vaultStatus === "unlocked" && draggedId && dropTargetId === vaultFolderId
+                ? "bg-blue-100 dark:bg-blue-900/30 ring-1 ring-blue-400"
+                : vaultStatus === "unlocked"
+                  ? "text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                  : "text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+            }`}
+            onClick={() => {
+              if (vaultStatus === "unlocked") {
+                setVaultExpanded((v) => !v);
+              } else {
+                onVaultClick?.();
+              }
+            }}
+            onDragOver={(e) => {
+              if (vaultStatus === "unlocked" && vaultFolderId && draggedId) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDropTargetId(vaultFolderId);
+              }
+            }}
+            onDragLeave={() => {
+              if (dropTargetId === vaultFolderId) setDropTargetId(null);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              if (vaultStatus === "unlocked" && vaultFolderId && draggedId) {
+                onMoveNote(draggedId, vaultFolderId);
+                setDraggedId(null);
+                setDropTargetId(null);
+                setVaultExpanded(true);
+              }
+            }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (vaultStatus === "unlocked") {
+                  onVaultLock?.();
+                  setVaultExpanded(false);
+                } else {
+                  onVaultClick?.();
+                }
+              }}
+              className={`shrink-0 p-0.5 rounded transition-colors ${
+                vaultStatus === "unlocked"
+                  ? "text-green-600 dark:text-green-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                  : "text-stone-400 dark:text-stone-500 hover:bg-stone-200 dark:hover:bg-stone-700"
+              }`}
+              title={vaultStatus === "unlocked" ? "Lock vault" : "Unlock vault"}
+            >
+              {vaultStatus === "unlocked" ? <LockOpen size={14} /> : <Lock size={14} />}
+            </button>
+            <span className="font-medium flex-1">Vault</span>
+            {vaultStatus === "unlocked" && (
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateNote(vaultFolderId);
+                  }}
+                  className="p-0.5 rounded text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700"
+                  title="New encrypted note"
+                >
+                  <FilePlus size={12} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateFolder(vaultFolderId);
+                  }}
+                  className="p-0.5 rounded text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700"
+                  title="New folder in vault"
+                >
+                  <FolderPlus size={12} />
+                </button>
+              </div>
+            )}
+          </div>
+          {vaultStatus === "unlocked" && vaultExpanded && vaultFolderId && (
+            <div className="pb-1">
+              <NoteTree
+                notes={vaultNotes}
+                parentId={vaultFolderId}
+                depth={1}
+                activeNoteId={activeNoteId}
+                selectedIds={selectedIds}
+                onSelectNote={onSelectNote}
+                onToggleSelect={toggleSelect}
+                onCreateNote={onCreateNote}
+                onCreateFolder={onCreateFolder}
+                onDeleteNote={onDeleteNote}
+                onRenameNote={onRenameNote}
+                expandedFolders={expandedFolders}
+                toggleFolder={toggleFolder}
+                draggedId={draggedId}
+                dropTargetId={dropTargetId}
+                onDragStart={handleDragStart}
+                onDragEnd={handleDragEnd}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                collaborativeNoteIds={collaborativeNoteIds}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Collaborations — all notes with collaborators (owned + shared with me) */}
+      {(() => {
+        const ownedCollabNotes = notes.filter(
+          (n) => collaborativeNoteIds.has(n.id) && !sharedWithMeIds.has(n.id)
+        );
+        const allCollabNotes = [...ownedCollabNotes, ...sharedWithMeNotes];
+        if (allCollabNotes.length === 0) return null;
+        return (
+          <div className="border-b border-stone-200 dark:border-stone-800">
+            <button
+              onClick={() => setCollabExpanded((v) => !v)}
+              className="flex items-center gap-2 w-full px-4 py-2 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+            >
+              <Users size={14} className="text-blue-500 dark:text-blue-400" />
+              <span className="font-medium flex-1 text-left">Collaborations</span>
+              <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                {allCollabNotes.length}
+              </span>
+            </button>
+            {collabExpanded && (
+              <div className="pb-1">
+                {allCollabNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    onClick={() => onSelectNote(note.id)}
+                    className={`flex items-center gap-2 w-full pl-10 pr-4 py-1.5 text-sm transition-colors ${
+                      activeNoteId === note.id
+                        ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100"
+                        : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    }`}
+                  >
+                    <FileText size={14} className="shrink-0" />
+                    <span className="truncate flex-1 text-left">{note.title}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Note list actions */}
       <div className="flex items-center gap-1 px-3 py-2 border-b border-stone-200 dark:border-stone-800">
         <button
           onClick={() => onCreateNote()}
-          className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400"
+          disabled={creatingNote}
+          className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 disabled:opacity-50"
           title="New note"
         >
-          <FilePlus size={14} />
+          {creatingNote ? <Loader2 size={14} className="animate-spin" /> : <FilePlus size={14} />}
           <span>Note</span>
         </button>
         <button
@@ -636,10 +899,18 @@ export function Sidebar({
         </button>
         <button
           onClick={onDailyNote}
-          className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 ml-auto"
-          title="Open today's daily note"
+          disabled={creatingDailyNote}
+          className="flex items-center gap-1.5 px-2 py-1 text-sm rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 ml-auto disabled:opacity-50"
+          title="New daily note"
         >
-          <CalendarDays size={14} />
+          {creatingDailyNote ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <div className="relative">
+              <CalendarDays size={14} />
+              <Plus size={8} strokeWidth={3} className="absolute -top-1 -right-1.5 text-stone-500 dark:text-stone-400" />
+            </div>
+          )}
         </button>
       </div>
 
@@ -659,7 +930,11 @@ export function Sidebar({
             </p>
           ) : ftsResults && ftsResults.length > 0 ? (
             <div>
-              {ftsResults.map((result) => (
+              {ftsResults.filter((r) => {
+                // Hide vault notes from search when vault is locked
+                if (vaultStatus !== "unlocked" && isVaultDescendant(r.id)) return false;
+                return true;
+              }).map((result) => (
                 <div
                   key={result.id}
                   className={`py-1.5 px-3 cursor-pointer rounded-md text-sm hover:bg-stone-200 dark:hover:bg-stone-700 ${
@@ -685,13 +960,13 @@ export function Sidebar({
               No results found
             </p>
           )
-        ) : filteredNotes.length === 0 ? (
+        ) : mainNotes.length === 0 ? (
           <p className="text-sm text-stone-400 dark:text-stone-500 px-3 py-4 text-center">
             No notes yet. Create one!
           </p>
         ) : (
           <NoteTree
-            notes={filteredNotes}
+            notes={mainNotes}
             activeNoteId={activeNoteId}
             selectedIds={selectedIds}
             onSelectNote={onSelectNote}
@@ -709,6 +984,7 @@ export function Sidebar({
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            collaborativeNoteIds={collaborativeNoteIds}
           />
         )}
         {/* Drop hint when dragging */}
@@ -744,6 +1020,7 @@ export function Sidebar({
         </div>
       )}
 
+
       {/* Footer */}
       <div className="border-t border-stone-200 dark:border-stone-800">
         <button
@@ -771,11 +1048,12 @@ export function Sidebar({
         </button>
         <button
           onClick={handleLogout}
-          className="w-full px-4 py-2 border-t border-stone-200 dark:border-stone-800 text-left text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+          disabled={loggingOut}
+          className="w-full px-4 py-2 border-t border-stone-200 dark:border-stone-800 text-left text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-50"
         >
           <div className="flex items-center gap-2 text-sm">
-            <LogOut size={14} />
-            <span>Sign out</span>
+            {loggingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+            <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
           </div>
           {userEmail && (
             <p className="text-xs text-stone-400 dark:text-stone-500 truncate mt-0.5" title={userEmail}>

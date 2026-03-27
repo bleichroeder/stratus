@@ -111,12 +111,21 @@ const commands: CommandItem[] = [
     description: "Highlighted info block",
     icon: <AlertCircle size={18} />,
     command: ({ editor, range }) => {
-      editor.chain().focus().deleteRange(range).toggleBlockquote().run();
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: "calloutBlock",
+          attrs: { calloutType: "info" },
+          content: [{ type: "paragraph" }],
+        })
+        .run();
     },
   },
   {
     title: "Sketch",
-    description: "Freehand drawing canvas",
+    description: "Freehand drawing with shapes",
     icon: <PenTool size={18} />,
     command: ({ editor, range }) => {
       editor

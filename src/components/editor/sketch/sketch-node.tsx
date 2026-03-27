@@ -22,6 +22,18 @@ function SketchNodeView(props: ReactNodeViewProps) {
     [updateAttributes]
   );
 
+  const handleBgColorChange = useCallback(
+    (backgroundColor: string) => {
+      updateAttributes({ backgroundColor });
+    },
+    [updateAttributes]
+  );
+
+  // Detect if collaboration is active (Yjs manages undo in that case)
+  const isCollaborative = editor.extensionManager.extensions.some(
+    (ext) => ext.name === "collaboration"
+  );
+
   return (
     <NodeViewWrapper className="my-4">
       <SketchPad
@@ -30,6 +42,9 @@ function SketchNodeView(props: ReactNodeViewProps) {
         height={(node.attrs.height as number) ?? 350}
         onHeightChange={handleHeightChange}
         readOnly={!editor.isEditable}
+        collaborative={isCollaborative}
+        backgroundColor={(node.attrs.backgroundColor as string) ?? ""}
+        onBackgroundColorChange={handleBgColorChange}
       />
     </NodeViewWrapper>
   );
@@ -62,6 +77,13 @@ export const SketchBlock = Node.create({
         parseHTML: (element) => Number(element.getAttribute("data-height")) || 350,
         renderHTML: (attributes) => ({
           "data-height": attributes.height,
+        }),
+      },
+      backgroundColor: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-bg-color") || "",
+        renderHTML: (attributes) => ({
+          "data-bg-color": attributes.backgroundColor,
         }),
       },
     };

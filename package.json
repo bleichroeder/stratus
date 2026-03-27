@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:next": "next dev",
+    "dev:party": "partykit dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -12,6 +14,8 @@
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.1",
     "@tiptap/extension-code-block-lowlight": "^3.20.5",
+    "@tiptap/extension-collaboration": "^3.20.5",
+    "@tiptap/extension-collaboration-cursor": "^3.0.0",
     "@tiptap/extension-image": "^3.20.5",
     "@tiptap/extension-link": "^3.20.5",
     "@tiptap/extension-placeholder": "^3.20.5",
@@ -24,13 +28,19 @@
     "@tiptap/react": "^3.20.5",
     "@tiptap/starter-kit": "^3.20.5",
     "@tiptap/suggestion": "^3.20.5",
+    "jose": "^6.2.2",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.7.0",
+    "mermaid": "^11.13.0",
     "next": "16.2.1",
+    "partysocket": "^1.1.16",
     "perfect-freehand": "^1.2.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "tippy.js": "^6.3.7"
+    "tippy.js": "^6.3.7",
+    "tldraw": "^4.5.4",
+    "y-partykit": "^0.0.33",
+    "yjs": "^13.6.30"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -39,6 +49,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "partykit": "^0.0.115",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
