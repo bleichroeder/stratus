@@ -1,23 +1,35 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let client: SupabaseClient | null = null;
+let clientEnvKey: string | null = null;
 
-function getClient(): SupabaseClient {
-  if (!client) {
-    const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) {
-      throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
-    }
+function getClient(env?: Record<string, unknown>): SupabaseClient {
+  const url = (
+    env?.SUPABASE_URL ?? env?.NEXT_PUBLIC_SUPABASE_URL ??
+    process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL
+  ) as string | undefined;
+  const key = (
+    env?.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
+  ) as string | undefined;
+
+  if (!url || !key) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  }
+
+  // Recreate client if env changed
+  const envKey = `${url}:${key}`;
+  if (!client || clientEnvKey !== envKey) {
     client = createClient(url, key);
+    clientEnvKey = envKey;
   }
   return client;
 }
 
 export async function loadNoteContent(
-  noteId: string
+  noteId: string,
+  env?: Record<string, unknown>
 ): Promise<Record<string, unknown> | null> {
-  const supabase = getClient();
+  const supabase = getClient(env);
   const { data, error } = await supabase
     .from("notes")
     .select("content")
@@ -34,9 +46,10 @@ export async function loadNoteContent(
 
 export async function saveNoteContent(
   noteId: string,
-  content: Record<string, unknown>
+  content: Record<string, unknown>,
+  env?: Record<string, unknown>
 ): Promise<void> {
-  const supabase = getClient();
+  const supabase = getClient(env);
   const { error } = await supabase
     .from("notes")
     .update({ content })
@@ -49,9 +62,10 @@ export async function saveNoteContent(
 
 export async function checkAccess(
   noteId: string,
-  userId: string
+  userId: string,
+  env?: Record<string, unknown>
 ): Promise<{ allowed: boolean; role: "owner" | "editor" | "viewer" }> {
-  const supabase = getClient();
+  const supabase = getClient(env);
 
   // Check if user is the note owner
   const { data: note, error: noteError } = await supabase

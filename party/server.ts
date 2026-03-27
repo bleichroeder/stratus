@@ -46,7 +46,7 @@ export default class CollabServer implements Party.Server {
       return;
     }
 
-    const access = await checkAccess(this.noteId, payload.sub);
+    const access = await checkAccess(this.noteId, payload.sub, this.room.env as Record<string, unknown>);
     if (!access.allowed) {
       console.error("[collab] Access denied for user", payload.sub, "on note", this.noteId);
       conn.close(4403, "Not authorized");
