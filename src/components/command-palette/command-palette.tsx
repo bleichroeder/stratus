@@ -13,6 +13,7 @@ import {
   XCircle,
   LayoutTemplate,
   BookmarkPlus,
+  Sparkles,
 } from "lucide-react";
 import type { Note } from "@/lib/types";
 import { useTheme } from "@/components/theme-provider";
@@ -35,6 +36,7 @@ interface CommandPaletteProps {
   onCloseAllTabs: () => void;
   onNewFromTemplate?: () => void;
   onSaveAsTemplate?: () => void;
+  onSummarize?: () => void;
 }
 
 function fuzzyMatch(query: string, text: string): boolean {
@@ -56,6 +58,7 @@ export function CommandPalette({
   onCloseAllTabs,
   onNewFromTemplate,
   onSaveAsTemplate,
+  onSummarize,
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -162,6 +165,17 @@ export function CommandPalette({
             },
           ]
         : []),
+      ...(onSummarize
+        ? [
+            {
+              id: "ai-summarize",
+              label: "Summarize note with AI",
+              icon: <Sparkles size={16} />,
+              section: "actions" as const,
+              onSelect: () => { onSummarize(); close(); },
+            },
+          ]
+        : []),
     ];
 
     // Use FTS results when available, otherwise fall back to fuzzy match
@@ -200,7 +214,7 @@ export function CommandPalette({
       : actions;
 
     return [...noteResults, ...folderResults, ...actionResults];
-  }, [notes, query, theme, close, onCreateNote, onCreateFolder, onDailyNote, onSelectNote, toggleTheme, ftsResults, onCloseAllTabs, onNewFromTemplate, onSaveAsTemplate]);
+  }, [notes, query, theme, close, onCreateNote, onCreateFolder, onDailyNote, onSelectNote, toggleTheme, ftsResults, onCloseAllTabs, onNewFromTemplate, onSaveAsTemplate, onSummarize]);
 
   useEffect(() => {
     setSelectedIndex(0);

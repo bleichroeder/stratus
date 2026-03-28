@@ -25,6 +25,7 @@ import {
   AlertCircle,
   PenTool,
   LayoutTemplate,
+  Sparkles,
 } from "lucide-react";
 
 interface CommandItem {
@@ -144,6 +145,15 @@ const commands: CommandItem[] = [
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).run();
       window.dispatchEvent(new CustomEvent("open-template-picker-insert"));
+    },
+  },
+  {
+    title: "AI Generate",
+    description: "Generate content with AI",
+    icon: <Sparkles size={18} />,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run();
+      window.dispatchEvent(new CustomEvent("open-ai-prompt"));
     },
   },
 ];

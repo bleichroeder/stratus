@@ -20,6 +20,7 @@ import {
   Undo,
   Redo,
   Minus,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { PromptModal, ImageUploadModal } from "@/components/ui/modal";
@@ -40,6 +41,8 @@ interface EditorToolbarProps {
   editor: Editor | null;
   onImageUpload?: (file: File) => Promise<string | null>;
   disabled?: boolean;
+  onSummarize?: () => void;
+  aiLoading?: boolean;
 }
 
 function ToolbarButton({
@@ -74,7 +77,7 @@ function Separator() {
   return <div className="w-px h-5 bg-stone-300 dark:bg-stone-600 mx-0.5 md:mx-1 shrink-0" />;
 }
 
-export function EditorToolbar({ editor, onImageUpload, disabled = false }: EditorToolbarProps) {
+export function EditorToolbar({ editor, onImageUpload, disabled = false, onSummarize, aiLoading = false }: EditorToolbarProps) {
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkDefault, setLinkDefault] = useState("");
   const [imageModalOpen, setImageModalOpen] = useState(false);
@@ -253,6 +256,18 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false }: Edito
           <ImageIcon size={iconSize} />
         </ToolbarButton>
 
+        {onSummarize && (
+          <>
+            <Separator />
+            <ToolbarButton
+              onClick={onSummarize}
+              disabled={aiLoading}
+              title="Summarize with AI"
+            >
+              <Sparkles size={iconSize} className={aiLoading ? "animate-pulse" : ""} />
+            </ToolbarButton>
+          </>
+        )}
       </div>
 
       <PromptModal

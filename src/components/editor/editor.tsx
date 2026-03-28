@@ -56,6 +56,8 @@ interface NoteEditorProps {
   collaborators?: NoteCollaborator[];
   onCollaboratorsChange?: (collaborators: NoteCollaborator[]) => void;
   editorRef?: React.MutableRefObject<{ insertContent: (content: Json) => void } | null>;
+  onSummarize?: () => void;
+  aiLoading?: boolean;
 }
 
 export function NoteEditor({
@@ -81,6 +83,8 @@ export function NoteEditor({
   collaborators = [],
   onCollaboratorsChange,
   editorRef,
+  onSummarize,
+  aiLoading,
 }: NoteEditorProps) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const noteIdRef = useRef(noteId);
@@ -368,6 +372,8 @@ export function NoteEditor({
             editor={editor}
             onImageUpload={onImageUpload}
             disabled={collaboratorRole === "viewer"}
+            onSummarize={onSummarize}
+            aiLoading={aiLoading}
           />
         </div>
         {/* Presence avatars for collaborative notes */}
