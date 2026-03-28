@@ -24,6 +24,7 @@ import {
   Image,
   AlertCircle,
   PenTool,
+  LayoutTemplate,
 } from "lucide-react";
 
 interface CommandItem {
@@ -134,6 +135,15 @@ const commands: CommandItem[] = [
         .deleteRange(range)
         .insertContent({ type: "sketchBlock", attrs: { strokes: [], height: 350 } })
         .run();
+    },
+  },
+  {
+    title: "Template",
+    description: "Insert a template",
+    icon: <LayoutTemplate size={18} />,
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run();
+      window.dispatchEvent(new CustomEvent("open-template-picker-insert"));
     },
   },
 ];

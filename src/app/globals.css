@@ -19,6 +19,15 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Hide scrollbar on mobile toolbar while keeping it scrollable */
+.toolbar-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.toolbar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* Custom scrollbars */
 * {
   scrollbar-width: thin;
@@ -296,6 +305,11 @@ body {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
 /* Tippy.js reset for slash commands */

@@ -6,6 +6,7 @@ create table public.notes (
   content jsonb,
   parent_id uuid references public.notes(id) on delete set null,
   is_folder boolean not null default false,
+  is_template boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

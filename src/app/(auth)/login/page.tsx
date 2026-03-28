@@ -31,7 +31,7 @@ export default function LoginPage() {
     } else {
       // Cache password for vault auto-unlock (cleared after use or on tab close)
       try { sessionStorage.setItem("_vp", password); } catch {}
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     }
   }

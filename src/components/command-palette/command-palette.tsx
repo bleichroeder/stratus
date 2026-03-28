@@ -11,6 +11,8 @@ import {
   Search,
   Folder,
   XCircle,
+  LayoutTemplate,
+  BookmarkPlus,
 } from "lucide-react";
 import type { Note } from "@/lib/types";
 import { useTheme } from "@/components/theme-provider";
@@ -31,6 +33,8 @@ interface CommandPaletteProps {
   onCreateFolder: () => void;
   onDailyNote: () => void;
   onCloseAllTabs: () => void;
+  onNewFromTemplate?: () => void;
+  onSaveAsTemplate?: () => void;
 }
 
 function fuzzyMatch(query: string, text: string): boolean {
@@ -50,6 +54,8 @@ export function CommandPalette({
   onCreateFolder,
   onDailyNote,
   onCloseAllTabs,
+  onNewFromTemplate,
+  onSaveAsTemplate,
 }: CommandPaletteProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -134,6 +140,28 @@ export function CommandPalette({
         section: "actions",
         onSelect: () => { onCloseAllTabs(); close(); },
       },
+      ...(onNewFromTemplate
+        ? [
+            {
+              id: "new-from-template",
+              label: "New note from template",
+              icon: <LayoutTemplate size={16} />,
+              section: "actions" as const,
+              onSelect: () => { onNewFromTemplate(); close(); },
+            },
+          ]
+        : []),
+      ...(onSaveAsTemplate
+        ? [
+            {
+              id: "save-as-template",
+              label: "Save current note as template",
+              icon: <BookmarkPlus size={16} />,
+              section: "actions" as const,
+              onSelect: () => { onSaveAsTemplate(); close(); },
+            },
+          ]
+        : []),
     ];
 
     // Use FTS results when available, otherwise fall back to fuzzy match
@@ -172,7 +200,7 @@ export function CommandPalette({
       : actions;
 
     return [...noteResults, ...folderResults, ...actionResults];
-  }, [notes, query, theme, close, onCreateNote, onCreateFolder, onDailyNote, onSelectNote, toggleTheme, ftsResults, onCloseAllTabs]);
+  }, [notes, query, theme, close, onCreateNote, onCreateFolder, onDailyNote, onSelectNote, toggleTheme, ftsResults, onCloseAllTabs, onNewFromTemplate, onSaveAsTemplate]);
 
   useEffect(() => {
     setSelectedIndex(0);

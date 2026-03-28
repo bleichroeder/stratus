@@ -22,6 +22,10 @@ import {
   getCollaborators,
   getSharedWithMeNotes,
   getCollaborativeNoteIds,
+  getTemplates,
+  createTemplate,
+  deleteTemplate,
+  renameTemplate,
 } from "@/lib/notes";
 import type { NoteCollaborator } from "@/lib/types";
 import { notifyPartyKitRoom } from "@/lib/yjs/notify";
@@ -35,6 +39,9 @@ import { CommandPalette } from "@/components/command-palette/command-palette";
 import { Welcome } from "@/components/onboarding/welcome";
 import { LogoFull } from "@/components/ui/logo";
 import { Dashboard } from "@/components/dashboard/dashboard";
+import { TemplatePickerModal } from "@/components/templates/template-picker-modal";
+import { TemplateManagerModal } from "@/components/templates/template-manager-modal";
+import { getAllTemplates, buildTemplate, type TemplateItem } from "@/lib/templates";
 import { VaultProvider, useVault } from "@/components/vault/vault-context";
 import { VaultSetupModal } from "@/components/vault/vault-setup-modal";
 import { VaultUnlockModal } from "@/components/vault/vault-unlock-modal";
@@ -103,6 +110,14 @@ export default function AppPage() {
 
   // Calendar state
   const [preparingNoteForEventId, setPreparingNoteForEventId] = useState<string | null>(null);
+
+  // Template state
+  const [userTemplates, setUserTemplates] = useState<Note[]>([]);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
+  const [templatePickerMode, setTemplatePickerMode] = useState<"create" | "insert">("create");
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [templateParentId, setTemplateParentId] = useState<string | null>(null);
+  const editorRef = useRef<{ insertContent: (content: Json) => void } | null>(null);
 
   // Loading / feedback states
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -188,6 +203,9 @@ export default function AppPage() {
     getCollaborativeNoteIds()
       .then((ids) => setCollaborativeNoteIds(new Set(ids)))
       .catch(() => setCollaborativeNoteIds(new Set()));
+    getTemplates()
+      .then(setUserTemplates)
+      .catch(() => setUserTemplates([]));
   }, [loadNotes]);
 
   useEffect(() => {
@@ -358,6 +376,112 @@ export default function AppPage() {
     },
     [vaultFolderId, vaultStatus, isInsideVault, notes]
   );
+
+  const handleCreateFromTemplate = useCallback(
+    async (template: TemplateItem) => {
+      setCreatingNote(true);
+      try {
+        // For built-in templates, generate fresh dynamic content (dates, env)
+        const dynamic = template.builtIn ? buildTemplate(template.id) : null;
+        const title = dynamic?.title ?? template.title;
+        const content = (dynamic?.content ?? template.content) as Json;
+
+        const parentId = templateParentId;
+        const inVault = parentId
+          ? (parentId === vaultFolderId || isInsideVault(parentId, notes))
+          : false;
+        const note = await createNote({
+          title,
+          content,
+          parent_id: parentId,
+          encrypted: inVault && vaultStatus === "unlocked",
+        });
+        setNotes((prev) => [note, ...prev]);
+        setTabs((prev) => [...prev, { id: note.id, title: note.title }]);
+        setActiveTabId(note.id);
+        setTemplateParentId(null);
+      } catch (err) {
+        console.error("Failed to create note from template:", err);
+      } finally {
+        setCreatingNote(false);
+      }
+    },
+    [templateParentId, vaultFolderId, vaultStatus, isInsideVault, notes]
+  );
+
+  const handleInsertTemplate = useCallback(
+    (template: TemplateItem) => {
+      const dynamic = template.builtIn ? buildTemplate(template.id) : null;
+      const resolved = (dynamic?.content ?? template.content) as { content?: Json[] };
+      if (editorRef.current && resolved?.content) {
+        editorRef.current.insertContent({ type: "doc", content: resolved.content } as Json);
+      }
+    },
+    []
+  );
+
+  const handleTemplateSelect = useCallback(
+    (template: TemplateItem) => {
+      if (templatePickerMode === "insert") {
+        handleInsertTemplate(template);
+      } else {
+        handleCreateFromTemplate(template);
+      }
+    },
+    [templatePickerMode, handleCreateFromTemplate, handleInsertTemplate]
+  );
+
+  const openTemplatePicker = useCallback(
+    (mode: "create" | "insert" = "create", parentId: string | null = null) => {
+      setTemplatePickerMode(mode);
+      setTemplateParentId(parentId);
+      setTemplatePickerOpen(true);
+    },
+    []
+  );
+
+  const handleSaveAsTemplate = useCallback(async () => {
+    if (!activeNote) return;
+    try {
+      const template = await createTemplate({
+        title: `${activeNote.title} (template)`,
+        content: activeNote.content as Json,
+      });
+      setUserTemplates((prev) => [...prev, template]);
+      showToast("Saved as template");
+    } catch (err) {
+      console.error("Failed to save template:", err);
+    }
+  }, [activeNote]);
+
+  const handleDeleteTemplate = useCallback(async (id: string) => {
+    try {
+      await deleteTemplate(id);
+      setUserTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      console.error("Failed to delete template:", err);
+    }
+  }, []);
+
+  const handleRenameTemplate = useCallback(async (id: string, newTitle: string) => {
+    try {
+      await renameTemplate(id, newTitle);
+      setUserTemplates((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, title: newTitle } : t))
+      );
+    } catch (err) {
+      console.error("Failed to rename template:", err);
+    }
+  }, []);
+
+  // Listen for slash command template picker event
+  useEffect(() => {
+    function handleSlashTemplate() {
+      openTemplatePicker("insert");
+    }
+    window.addEventListener("open-template-picker-insert", handleSlashTemplate);
+    return () => window.removeEventListener("open-template-picker-insert", handleSlashTemplate);
+  }, [openTemplatePicker]);
 
   const handleCreateFolder = useCallback(
     (parentId?: string | null) => {
@@ -1009,6 +1133,7 @@ export default function AppPage() {
         onSelectNote={openTab}
         onCreateNote={handleCreateNote}
         onCreateFolder={handleCreateFolder}
+        onCreateFromTemplate={(parentId) => openTemplatePicker("create", parentId)}
         onDeleteNote={handleDeleteNote}
         onDeleteMultiple={handleDeleteMultiple}
         onMoveNote={handleMoveNote}
@@ -1085,6 +1210,7 @@ export default function AppPage() {
             onShare={handleShare}
             onUnshare={handleUnshare}
             saveStatus={saveStatus}
+            editorRef={editorRef}
             isCollaborative={activeNoteCollaborators.length > 0 && !!process.env.NEXT_PUBLIC_PARTYKIT_HOST}
             collaboratorRole={
               activeNote.user_id === currentUserId
@@ -1119,6 +1245,7 @@ export default function AppPage() {
             onSelectNote={openTab}
             onCreateNote={() => handleCreateNote()}
             onDailyNote={handleDailyNote}
+            onNewFromTemplate={() => openTemplatePicker("create")}
             creatingNote={creatingNote}
             creatingDailyNote={creatingDailyNote}
             vaultStatus={vaultStatus}
@@ -1150,6 +1277,8 @@ export default function AppPage() {
         onCreateFolder={() => handleCreateFolder()}
         onDailyNote={handleDailyNote}
         onCloseAllTabs={closeAllTabs}
+        onNewFromTemplate={() => openTemplatePicker("create")}
+        onSaveAsTemplate={activeNote ? handleSaveAsTemplate : undefined}
       />
 
       <ConfirmModal
@@ -1165,6 +1294,23 @@ export default function AppPage() {
         confirmLabel="Archive"
         danger
         loading={archiveLoading}
+      />
+
+      <TemplatePickerModal
+        open={templatePickerOpen}
+        onClose={() => { setTemplatePickerOpen(false); setTemplateParentId(null); }}
+        onSelect={handleTemplateSelect}
+        templates={getAllTemplates(userTemplates)}
+        onManage={() => setTemplateManagerOpen(true)}
+        mode={templatePickerMode}
+      />
+
+      <TemplateManagerModal
+        open={templateManagerOpen}
+        onClose={() => setTemplateManagerOpen(false)}
+        templates={getAllTemplates(userTemplates)}
+        onDelete={handleDeleteTemplate}
+        onRename={handleRenameTemplate}
       />
 
       <VaultSetupModal

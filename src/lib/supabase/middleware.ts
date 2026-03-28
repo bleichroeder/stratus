@@ -29,27 +29,29 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Redirect unauthenticated users to login (except auth routes)
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/signup") &&
-    !request.nextUrl.pathname.startsWith("/callback") &&
-    !request.nextUrl.pathname.startsWith("/share")
-  ) {
+  const { pathname } = request.nextUrl;
+
+  // Public routes that don't require authentication
+  const publicPaths = ["/login", "/signup", "/callback", "/share", "/terms", "/policy"];
+  const isPublicRoute =
+    pathname === "/" || publicPaths.some((path) => pathname.startsWith(path));
+
+  // Redirect unauthenticated users to the landing page (except public routes)
+  if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
-    url.pathname = "/login";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users from landing/auth pages to the app
   if (
     user &&
-    (request.nextUrl.pathname.startsWith("/login") ||
-      request.nextUrl.pathname.startsWith("/signup"))
+    (pathname === "/" ||
+      pathname.startsWith("/login") ||
+      pathname.startsWith("/signup"))
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 

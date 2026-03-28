@@ -21,8 +21,20 @@ import {
   Redo,
   Minus,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PromptModal, ImageUploadModal } from "@/components/ui/modal";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(max-width: 767px)");
+    setIsMobile(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, []);
+  return isMobile;
+}
 
 interface EditorToolbarProps {
   editor: Editor | null;
@@ -49,7 +61,7 @@ function ToolbarButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      className={`p-1.5 rounded hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors ${
+      className={`p-2.5 md:p-1.5 rounded-lg md:rounded hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors shrink-0 ${
         active ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100" : "text-stone-600 dark:text-stone-400"
       } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
     >
@@ -59,7 +71,7 @@ function ToolbarButton({
 }
 
 function Separator() {
-  return <div className="w-px h-5 bg-stone-300 dark:bg-stone-600 mx-1" />;
+  return <div className="w-px h-5 bg-stone-300 dark:bg-stone-600 mx-0.5 md:mx-1 shrink-0" />;
 }
 
 export function EditorToolbar({ editor, onImageUpload, disabled = false }: EditorToolbarProps) {
@@ -92,13 +104,15 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false }: Edito
     }
   }
 
+  const isMobile = useIsMobile();
+
   if (!editor) return null;
 
-  const iconSize = 16;
+  const iconSize = isMobile ? 18 : 16;
 
   return (
     <>
-      <div className={`flex items-center gap-0.5 px-2 py-1 md:px-3 md:py-1.5 bg-white dark:bg-stone-950 sticky top-0 z-10 flex-wrap${disabled ? " opacity-50 pointer-events-none" : ""}`}>
+      <div className={`flex items-center gap-0.5 px-2 py-1.5 md:px-3 md:py-1.5 bg-white dark:bg-stone-950 sticky top-0 z-10 overflow-x-auto md:flex-wrap border-b border-stone-200 dark:border-stone-800 toolbar-scroll${disabled ? " opacity-50 pointer-events-none" : ""}`}>
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
           disabled={!editor.can().undo()}
@@ -238,6 +252,7 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false }: Edito
         >
           <ImageIcon size={iconSize} />
         </ToolbarButton>
+
       </div>
 
       <PromptModal

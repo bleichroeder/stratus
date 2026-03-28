@@ -17,6 +17,7 @@ export interface Database {
           content: Json | null;
           parent_id: string | null;
           is_folder: boolean;
+          is_template: boolean;
           archived_at: string | null;
           shared_token: string | null;
           shared_at: string | null;
@@ -31,6 +32,7 @@ export interface Database {
           content?: Json | null;
           parent_id?: string | null;
           is_folder?: boolean;
+          is_template?: boolean;
           encrypted?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -42,6 +44,7 @@ export interface Database {
           content?: Json | null;
           parent_id?: string | null;
           is_folder?: boolean;
+          is_template?: boolean;
           encrypted?: boolean;
           created_at?: string;
           updated_at?: string;

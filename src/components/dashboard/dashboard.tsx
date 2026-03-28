@@ -1,17 +1,17 @@
 "use client";
 
 import type { Note, Json, CalendarEvent } from "@/lib/types";
-import { FileText, Plus, CalendarDays, Lock, Clock, Users } from "lucide-react";
-import { useMemo, useState, useEffect } from "react";
+import { FileText, Plus, CalendarDays, Lock, Clock, Users, LayoutTemplate } from "lucide-react";
+import { useMemo } from "react";
 import { UpcomingMeetings } from "./upcoming-meetings";
-
-type VaultStatus = "uninitialized" | "locked" | "unlocked";
+import type { VaultStatus } from "@/components/vault/vault-context";
 
 interface DashboardProps {
   notes: Note[];
   onSelectNote: (id: string) => void;
   onCreateNote: () => void;
   onDailyNote: () => void;
+  onNewFromTemplate: () => void;
   creatingNote?: boolean;
   creatingDailyNote?: boolean;
   vaultStatus: VaultStatus;
@@ -86,27 +86,15 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function Dashboard({ notes, onSelectNote, onCreateNote, onDailyNote, creatingNote, creatingDailyNote, vaultStatus, onVaultUnlock, userName, isGoogleUser, onPrepareMeetingNote, preparingNoteForEventId, collaborativeNoteIds = new Set(), sharedWithMeNotes = [] }: DashboardProps) {
+export function Dashboard({ notes, onSelectNote, onCreateNote, onDailyNote, onNewFromTemplate, creatingNote, creatingDailyNote, vaultStatus, onVaultUnlock, userName, isGoogleUser, onPrepareMeetingNote, preparingNoteForEventId, collaborativeNoteIds = new Set(), sharedWithMeNotes = [] }: DashboardProps) {
   const recentNotes = useMemo(() => {
     const sharedIds = new Set(sharedWithMeNotes.map((n) => n.id));
     return notes
-      .filter((n) => !n.is_folder && !n.archived_at && !collaborativeNoteIds.has(n.id) && !sharedIds.has(n.id))
+      .filter((n) => !n.is_folder && !n.is_template && !n.archived_at && !collaborativeNoteIds.has(n.id) && !sharedIds.has(n.id))
       .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
       .slice(0, 8);
   }, [notes, collaborativeNoteIds, sharedWithMeNotes]);
 
-  const totalNotes = useMemo(() => notes.filter((n) => !n.is_folder && !n.archived_at).length, [notes]);
-  const totalFolders = useMemo(() => notes.filter((n) => n.is_folder && !n.archived_at).length, [notes]);
-
-  const [currentTime, setCurrentTime] = useState(() =>
-    new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-  );
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
-    }, 60000);
-    return () => clearInterval(interval);
-  }, []);
 
   const allCollabNotes = useMemo(() => {
     const sharedIds = new Set(sharedWithMeNotes.map((n) => n.id));
@@ -121,13 +109,13 @@ export function Dashboard({ notes, onSelectNote, onCreateNote, onDailyNote, crea
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
         {/* Greeting + quick actions */}
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
             <h1 className="text-lg font-semibold text-stone-900 dark:text-stone-100">
               {getGreeting()}{userName ? `, ${userName}` : ""}.
             </h1>
             <p className="text-sm text-stone-500 dark:text-stone-400 mt-0.5">
-              Today is {todayFormatted()}. It&apos;s {currentTime}.
+              Today is {todayFormatted()}.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -146,6 +134,13 @@ export function Dashboard({ notes, onSelectNote, onCreateNote, onDailyNote, crea
             >
               <CalendarDays size={16} />
               {creatingDailyNote ? "Creating..." : "Daily note"}
+            </button>
+            <button
+              onClick={onNewFromTemplate}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
+            >
+              <LayoutTemplate size={16} />
+              Template
             </button>
           </div>
         </div>
@@ -259,11 +254,6 @@ export function Dashboard({ notes, onSelectNote, onCreateNote, onDailyNote, crea
             </div>
           </div>
         )}
-
-        {/* Stats */}
-        <div className="text-xs text-stone-400 dark:text-stone-500">
-          {totalNotes} {totalNotes === 1 ? "note" : "notes"} · {totalFolders} {totalFolders === 1 ? "folder" : "folders"}
-        </div>
       </div>
     </div>
   );

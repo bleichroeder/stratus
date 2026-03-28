@@ -8,6 +8,7 @@ import {
   LogOut,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   FileText,
   Folder,
   FolderOpen,
@@ -24,11 +25,17 @@ import {
   LockOpen,
   Loader2,
   Users,
+  FileText as FileTextIcon,
+  Shield,
+  User,
+  Upload,
+  LayoutTemplate,
 } from "lucide-react";
 import type { VaultStatus } from "@/components/vault/vault-context";
 import type { Note } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useTheme } from "@/components/theme-provider";
 import { searchNotes, type SearchResult } from "@/lib/notes";
 import { LogoFull, LogoIcon } from "@/components/ui/logo";
@@ -58,6 +65,7 @@ interface SidebarProps {
   creatingDailyNote?: boolean;
   sharedWithMeNotes?: Note[];
   collaborativeNoteIds?: Set<string>;
+  onCreateFromTemplate?: (parentId: string | null) => void;
 }
 
 function NoteTreeItem({
@@ -82,6 +90,7 @@ function NoteTreeItem({
   onDragLeave,
   onDrop,
   collaborativeNoteIds,
+  onCreateFromTemplate,
 }: {
   note: Note;
   notes: Note[];
@@ -104,6 +113,7 @@ function NoteTreeItem({
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string) => void;
   collaborativeNoteIds: Set<string>;
+  onCreateFromTemplate?: (parentId: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(note.title);
@@ -249,6 +259,18 @@ function NoteTreeItem({
                 >
                   <FolderPlus size={12} />
                 </button>
+                {onCreateFromTemplate && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateFromTemplate(note.id);
+                    }}
+                    className="p-0.5 rounded hover:bg-stone-300 dark:hover:bg-stone-600"
+                    title="New from template"
+                  >
+                    <LayoutTemplate size={12} />
+                  </button>
+                )}
               </>
             )}
             <button
@@ -297,6 +319,7 @@ function NoteTreeItem({
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           collaborativeNoteIds={collaborativeNoteIds}
+          onCreateFromTemplate={onCreateFromTemplate}
         />
       )}
     </div>
@@ -325,6 +348,7 @@ function NoteTree({
   onDragLeave,
   onDrop,
   collaborativeNoteIds,
+  onCreateFromTemplate,
 }: {
   notes: Note[];
   parentId?: string | null;
@@ -347,8 +371,9 @@ function NoteTree({
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string) => void;
   collaborativeNoteIds: Set<string>;
+  onCreateFromTemplate?: (parentId: string | null) => void;
 }) {
-  const children = notes.filter((n) => n.parent_id === parentId);
+  const children = notes.filter((n) => n.parent_id === parentId && !n.is_template);
   const sorted = [...children].sort((a, b) => {
     if (a.is_folder && !b.is_folder) return -1;
     if (!a.is_folder && b.is_folder) return 1;
@@ -381,6 +406,7 @@ function NoteTree({
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           collaborativeNoteIds={collaborativeNoteIds}
+          onCreateFromTemplate={onCreateFromTemplate}
         />
       ))}
     </div>
@@ -412,12 +438,16 @@ export function Sidebar({
   creatingDailyNote = false,
   sharedWithMeNotes = [],
   collaborativeNoteIds = new Set(),
+  onCreateFromTemplate,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [collabExpanded, setCollabExpanded] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -431,8 +461,21 @@ export function Sidebar({
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserEmail(user?.email ?? null);
+      setUserName(user?.user_metadata?.name ?? null);
     });
   }, []);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    if (!userMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [userMenuOpen]);
 
   // Debounced full-text search
   useEffect(() => {
@@ -522,7 +565,7 @@ export function Sidebar({
   async function handleLogout() {
     setLoggingOut(true);
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
     router.refresh();
   }
 
@@ -683,14 +726,61 @@ export function Sidebar({
         >
           {theme === "light" ? <Moon size={16} /> : <Sun size={16} />}
         </button>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 disabled:opacity-50"
-          title="Sign out"
-        >
-          {loggingOut ? <Loader2 size={16} className="animate-spin" /> : <LogOut size={16} />}
-        </button>
+        <div className="relative" ref={collapsed ? userMenuRef : undefined}>
+          <button
+            onClick={() => setUserMenuOpen((v) => !v)}
+            className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400"
+            title={userEmail ?? "Account"}
+          >
+            <User size={16} />
+          </button>
+          {userMenuOpen && (
+            <div className="absolute bottom-full left-0 mb-1 w-48 rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-lg py-1 z-50">
+              <div className="px-3 py-2 border-b border-stone-200 dark:border-stone-800">
+                {userName && (
+                  <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">{userName}</p>
+                )}
+                {userEmail && (
+                  <p className="text-xs text-stone-400 dark:text-stone-500 truncate">{userEmail}</p>
+                )}
+              </div>
+              <Link
+                href="/import"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <Upload size={14} />
+                <span>Import notes</span>
+              </Link>
+              <div className="border-t border-stone-200 dark:border-stone-800 mt-1 pt-1">
+                <Link
+                  href="/terms"
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  <FileTextIcon size={14} />
+                  <span>Terms of Service</span>
+                </Link>
+                <Link
+                  href="/policy"
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  <Shield size={14} />
+                  <span>Privacy Policy</span>
+                </Link>
+              </div>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-50 border-t border-stone-200 dark:border-stone-800 mt-1 pt-1.5"
+              >
+                {loggingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -804,6 +894,18 @@ export function Sidebar({
                 >
                   <FolderPlus size={12} />
                 </button>
+                {onCreateFromTemplate && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateFromTemplate(vaultFolderId);
+                    }}
+                    className="p-0.5 rounded text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 hover:bg-stone-200 dark:hover:bg-stone-700"
+                    title="New from template"
+                  >
+                    <LayoutTemplate size={12} />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -831,6 +933,7 @@ export function Sidebar({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 collaborativeNoteIds={collaborativeNoteIds}
+                onCreateFromTemplate={onCreateFromTemplate}
               />
             </div>
           )}
@@ -985,6 +1088,7 @@ export function Sidebar({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             collaborativeNoteIds={collaborativeNoteIds}
+            onCreateFromTemplate={onCreateFromTemplate}
           />
         )}
         {/* Drop hint when dragging */}
@@ -1046,21 +1150,70 @@ export function Sidebar({
           {theme === "light" ? <Moon size={14} /> : <Sun size={14} />}
           <span>{theme === "light" ? "Dark mode" : "Light mode"}</span>
         </button>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="w-full px-4 py-2 border-t border-stone-200 dark:border-stone-800 text-left text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-50"
-        >
-          <div className="flex items-center gap-2 text-sm">
-            {loggingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-            <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
-          </div>
-          {userEmail && (
-            <p className="text-xs text-stone-400 dark:text-stone-500 truncate mt-0.5" title={userEmail}>
-              {userEmail}
-            </p>
+
+        {/* User menu */}
+        <div className="relative border-t border-stone-200 dark:border-stone-800" ref={!collapsed ? userMenuRef : undefined}>
+          <button
+            onClick={() => setUserMenuOpen((v) => !v)}
+            className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+          >
+            <div className="w-6 h-6 rounded-full bg-stone-300 dark:bg-stone-700 flex items-center justify-center shrink-0">
+              <User size={14} className="text-stone-600 dark:text-stone-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
+                {userName || userEmail || "Account"}
+              </p>
+              {userName && userEmail && (
+                <p className="text-xs text-stone-400 dark:text-stone-500 truncate">{userEmail}</p>
+              )}
+            </div>
+            {userMenuOpen ? (
+              <ChevronDown size={14} className="text-stone-400 dark:text-stone-500 shrink-0" />
+            ) : (
+              <ChevronUp size={14} className="text-stone-400 dark:text-stone-500 shrink-0" />
+            )}
+          </button>
+
+          {userMenuOpen && (
+            <div className="absolute bottom-full left-0 right-0 mb-1 mx-2 rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-lg py-1 z-50">
+              <Link
+                href="/import"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <Upload size={14} />
+                <span>Import notes</span>
+              </Link>
+              <div className="border-t border-stone-200 dark:border-stone-800 mt-1 pt-1">
+                <Link
+                  href="/terms"
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  <FileTextIcon size={14} />
+                  <span>Terms of Service</span>
+                </Link>
+                <Link
+                  href="/policy"
+                  className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                  onClick={() => setUserMenuOpen(false)}
+                >
+                  <Shield size={14} />
+                  <span>Privacy Policy</span>
+                </Link>
+              </div>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-50 border-t border-stone-200 dark:border-stone-800 mt-1 pt-1.5"
+              >
+                {loggingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                <span>{loggingOut ? "Signing out..." : "Sign out"}</span>
+              </button>
+            </div>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ import {
 } from "@/lib/crypto";
 import type { Note } from "@/lib/types";
 
-export type VaultStatus = "uninitialized" | "locked" | "unlocked";
+export type VaultStatus = "loading" | "uninitialized" | "locked" | "unlocked";
 
 const VAULT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 const MAX_FAILED_ATTEMPTS = 5;
@@ -37,7 +37,7 @@ export function useVault() {
 }
 
 export function VaultProvider({ children }: { children: React.ReactNode }) {
-  const [status, setStatus] = useState<VaultStatus>("locked");
+  const [status, setStatus] = useState<VaultStatus>("loading");
   const [vaultKey, setVaultKey] = useState<CryptoKey | null>(null);
   const [vaultFolderId, setVaultFolderId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<VaultMetadata | null>(null);

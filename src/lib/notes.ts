@@ -11,6 +11,7 @@ export async function getNotes(): Promise<Note[]> {
     .from("notes")
     .select("*")
     .is("archived_at", null)
+    .eq("is_template", false)
     .order("updated_at", { ascending: false });
 
   if (error) throw error;
@@ -23,6 +24,7 @@ export async function getArchivedNotes(): Promise<Note[]> {
     .from("notes")
     .select("*")
     .not("archived_at", "is", null)
+    .eq("is_template", false)
     .order("archived_at", { ascending: false });
 
   if (error) throw error;
@@ -282,6 +284,59 @@ export async function getSharedWithMeNotes(): Promise<Note[]> {
 
   if (error) throw error;
   return data;
+}
+
+// --- Templates ---
+
+export async function getTemplates(): Promise<Note[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("is_template", true)
+    .is("archived_at", null)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function createTemplate(
+  template: { title: string; content: Json }
+): Promise<Note> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("notes")
+    .insert({
+      title: template.title,
+      content: template.content,
+      is_template: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("notes")
+    .delete()
+    .eq("id", id)
+    .eq("is_template", true);
+  if (error) throw error;
+}
+
+export async function renameTemplate(id: string, title: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("notes")
+    .update({ title })
+    .eq("id", id)
+    .eq("is_template", true);
+  if (error) throw error;
 }
 
 export async function uploadImage(

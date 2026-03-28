@@ -55,6 +55,7 @@ interface NoteEditorProps {
   isInsideVault?: boolean;
   collaborators?: NoteCollaborator[];
   onCollaboratorsChange?: (collaborators: NoteCollaborator[]) => void;
+  editorRef?: React.MutableRefObject<{ insertContent: (content: Json) => void } | null>;
 }
 
 export function NoteEditor({
@@ -79,6 +80,7 @@ export function NoteEditor({
   isInsideVault = false,
   collaborators = [],
   onCollaboratorsChange,
+  editorRef,
 }: NoteEditorProps) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const noteIdRef = useRef(noteId);
@@ -161,7 +163,7 @@ export function NoteEditor({
       editorProps: {
         attributes: {
           class:
-            "prose prose-stone max-w-none focus:outline-none min-h-[calc(100vh-12rem)] px-4 py-3 md:px-8 md:py-4",
+            "prose prose-stone max-w-none focus:outline-none min-h-full px-4 py-3 md:px-8 md:py-4",
           spellcheck: "true",
           autocorrect: "on",
         },
@@ -342,8 +344,24 @@ export function NoteEditor({
     }
   }, [editor, collaboratorRole]);
 
+  // Expose editor ref for template insertion
+  useEffect(() => {
+    if (editorRef) {
+      editorRef.current = editor
+        ? {
+            insertContent: (content: Json) => {
+              const doc = content as { content?: unknown[] };
+              if (doc?.content) {
+                editor.chain().focus().insertContent(doc.content as unknown[]).run();
+              }
+            },
+          }
+        : null;
+    }
+  }, [editor, editorRef]);
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="flex items-center border-b border-stone-200 dark:border-stone-800">
         <div className="flex-1 border-b-0">
           <EditorToolbar
