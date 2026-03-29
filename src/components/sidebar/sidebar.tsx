@@ -595,6 +595,7 @@ export function Sidebar({
   const [collabExpanded, setCollabExpanded] = useState(true);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -611,6 +612,7 @@ export function Sidebar({
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUserEmail(user?.email ?? null);
       setUserName(user?.user_metadata?.name ?? null);
+      setUserAvatar(user?.user_metadata?.avatar_url ?? user?.user_metadata?.picture ?? null);
     });
   }, []);
 
@@ -881,7 +883,11 @@ export function Sidebar({
             className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400"
             title={userEmail ?? "Account"}
           >
-            <User size={16} />
+            {userAvatar ? (
+              <img src={userAvatar} alt="" className="w-4 h-4 rounded-full" referrerPolicy="no-referrer" />
+            ) : (
+              <User size={16} />
+            )}
           </button>
           {userMenuOpen && (
             <div className="absolute bottom-full left-0 mb-1 w-48 rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-lg py-1 z-50">
@@ -1320,9 +1326,13 @@ export function Sidebar({
             onClick={() => setUserMenuOpen((v) => !v)}
             className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
           >
-            <div className="w-6 h-6 rounded-full bg-stone-300 dark:bg-stone-700 flex items-center justify-center shrink-0">
-              <User size={14} className="text-stone-600 dark:text-stone-300" />
-            </div>
+            {userAvatar ? (
+              <img src={userAvatar} alt="" className="w-6 h-6 rounded-full shrink-0" referrerPolicy="no-referrer" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-stone-300 dark:bg-stone-700 flex items-center justify-center shrink-0">
+                <User size={14} className="text-stone-600 dark:text-stone-300" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
                 {userName || userEmail || "Account"}
