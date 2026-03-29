@@ -40,48 +40,48 @@ function EventCard({ event, onPrepareMeetingNote, isPreparing }: {
   const attendeeCount = event.attendees.filter((a) => !a.self).length;
 
   return (
-    <div className="flex items-center gap-4 p-3 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
-      <div className="text-xs font-mono text-stone-500 dark:text-stone-400 shrink-0 w-32">
-        {formatTimeRange(event.startTime, event.endTime)}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
+    <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
+      <div className="flex items-center gap-3">
+        <p className="flex-1 text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
           {event.title}
         </p>
-        <div className="flex items-center gap-3 mt-0.5">
-          {attendeeCount > 0 && (
-            <span className="flex items-center gap-1 text-xs text-stone-400 dark:text-stone-500">
-              <Users size={10} />
-              {attendeeCount}
-            </span>
-          )}
-          {event.meetingLink && (
-            <a
-              href={event.meetingLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-            >
-              <Video size={10} />
-              Join
-            </a>
-          )}
-        </div>
+        <button
+          onClick={() => onPrepareMeetingNote(event)}
+          disabled={isPreparing}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-50 shrink-0 transition-colors"
+        >
+          <FileText size={12} />
+          {isPreparing ? "Creating..." : "Prepare note"}
+        </button>
       </div>
-
-      <button
-        onClick={() => onPrepareMeetingNote(event)}
-        disabled={isPreparing}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-50 shrink-0 transition-colors"
-      >
-        <FileText size={12} />
-        {isPreparing ? "Creating..." : "Prepare note"}
-      </button>
+      <div className="flex items-center gap-3 text-xs text-stone-400 dark:text-stone-500">
+        <span className="font-mono whitespace-nowrap">
+          {formatTimeRange(event.startTime, event.endTime)}
+        </span>
+        {attendeeCount > 0 && (
+          <span className="flex items-center gap-1">
+            <Users size={10} />
+            {attendeeCount}
+          </span>
+        )}
+        {event.meetingLink && (
+          <a
+            href={event.meetingLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+          >
+            <Video size={10} />
+            Join
+          </a>
+        )}
+      </div>
     </div>
   );
 }
+
+const MAX_EVENTS_PER_DAY = 5;
 
 export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId }: UpcomingMeetingsProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -90,7 +90,13 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
 
   useEffect(() => {
     let cancelled = false;
-    fetchCalendarEvents(24)
+
+    // Calculate hours needed to reach end of tomorrow
+    const now = new Date();
+    const endOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 2);
+    const hoursUntilEndOfTomorrow = Math.ceil((endOfTomorrow.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+    fetchCalendarEvents(hoursUntilEndOfTomorrow)
       .then((data) => {
         if (!cancelled) setEvents(data);
       })
@@ -138,7 +144,7 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
                   {group.label}
                 </p>
               )}
-              {group.events.map((event) => (
+              {group.events.slice(0, MAX_EVENTS_PER_DAY).map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
@@ -146,6 +152,11 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
                   isPreparing={preparingNoteForEventId === event.id}
                 />
               ))}
+              {group.events.length > MAX_EVENTS_PER_DAY && (
+                <p className="text-xs text-stone-400 dark:text-stone-500 pl-3">
+                  +{group.events.length - MAX_EVENTS_PER_DAY} more
+                </p>
+              )}
             </div>
           ))}
         </div>

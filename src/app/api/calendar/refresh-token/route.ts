@@ -28,6 +28,8 @@ export async function POST() {
   });
 
   if (!tokenRes.ok) {
+    const body = await tokenRes.text();
+    console.error("Google token refresh failed:", tokenRes.status, body);
     return Response.json({ error: "Token refresh failed" }, { status: 502 });
   }
 

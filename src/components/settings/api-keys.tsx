@@ -129,8 +129,8 @@ export function ApiKeysSection() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
+      <div className="flex items-start sm:items-center justify-between gap-3 mb-4">
+        <div className="min-w-0">
           <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">
             API Keys
           </h2>
@@ -140,10 +140,11 @@ export function ApiKeysSection() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200"
         >
           <Plus size={14} />
-          Generate Key
+          <span className="hidden sm:inline">Generate Key</span>
+          <span className="sm:hidden">New</span>
         </button>
       </div>
 
@@ -153,8 +154,8 @@ export function ApiKeysSection() {
           <p className="text-xs font-medium text-amber-800 dark:text-amber-300 mb-2">
             Save this key — it cannot be retrieved again.
           </p>
-          <div className="flex items-center gap-2 mb-3">
-            <code className="flex-1 text-xs bg-white dark:bg-stone-800 px-2 py-1.5 rounded border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 font-mono break-all">
+          <div className="flex items-start gap-2 mb-3">
+            <code className="flex-1 min-w-0 text-xs bg-white dark:bg-stone-800 px-2 py-1.5 rounded border border-stone-200 dark:border-stone-700 text-stone-900 dark:text-stone-100 font-mono break-all">
               {revealedKey}
             </code>
             <button
@@ -169,7 +170,7 @@ export function ApiKeysSection() {
             MCP config (paste into claude_desktop_config.json or Cursor settings):
           </p>
           <div className="relative">
-            <pre className="text-xs bg-white dark:bg-stone-800 p-2 rounded border border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 overflow-x-auto">
+            <pre className="text-[11px] sm:text-xs bg-white dark:bg-stone-800 p-2 rounded border border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 overflow-x-auto max-w-full">
               {mcpConfig(revealedKey)}
             </pre>
             <button
@@ -269,8 +270,8 @@ export function ApiKeysSection() {
               key={k.id}
               className="flex items-start justify-between p-3 rounded-md border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800/50"
             >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Key size={14} className="shrink-0 text-stone-500 dark:text-stone-400" />
                   <span className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
                     {k.name}
@@ -279,7 +280,7 @@ export function ApiKeysSection() {
                     {k.key_prefix}...
                   </code>
                 </div>
-                <div className="flex items-center gap-3 mt-1 text-xs text-stone-500 dark:text-stone-400">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs text-stone-500 dark:text-stone-400">
                   <span>
                     Scopes:{" "}
                     {k.scopes
