@@ -61,9 +61,11 @@ function ToolbarButton({
   return (
     <button
       type="button"
+      onPointerDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
       title={title}
+      style={{ touchAction: "manipulation" }}
       className={`p-2.5 md:p-1.5 rounded-lg md:rounded hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors shrink-0 ${
         active ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100" : "text-stone-600 dark:text-stone-400"
       } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}

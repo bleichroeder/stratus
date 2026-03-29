@@ -375,7 +375,7 @@ export function NoteEditor({
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex items-center border-b border-stone-200 dark:border-stone-800">
-        <div className="flex-1 border-b-0">
+        <div className="flex-1 min-w-0 border-b-0">
           <EditorToolbar
             editor={editor}
             onImageUpload={onImageUpload}
