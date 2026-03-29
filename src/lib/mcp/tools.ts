@@ -105,7 +105,7 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
 
     server.tool(
       "get_daily_note",
-      "Get today's daily note (or a specific date). Daily notes are identified by title pattern 'Daily Note — YYYY-MM-DD'.",
+      "Get today's daily note (or a specific date). Daily notes use the title format 'March 29, 2026' and live in a Daily Notes / year / month folder hierarchy.",
       {
         date: z
           .string()
@@ -114,15 +114,19 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
           .describe("Date in YYYY-MM-DD format. Defaults to today."),
       },
       async ({ date }) => {
-        const targetDate =
-          date || new Date().toISOString().split("T")[0];
-        const title = `Daily Note — ${targetDate}`;
+        const d = date ? new Date(date + "T00:00:00") : new Date();
+        const title = d.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
 
         const { data, error } = await supabase
           .from("notes")
           .select("*")
           .eq("user_id", userId)
           .eq("title", title)
+          .eq("is_folder", false)
           .is("archived_at", null)
           .single();
 
@@ -131,7 +135,7 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
             content: [
               {
                 type: "text" as const,
-                text: `No daily note found for ${targetDate}.`,
+                text: `No daily note found for ${title}.`,
               },
             ],
           };
@@ -201,7 +205,7 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
 
     server.tool(
       "append_to_daily_note",
-      "Append content to today's daily note. Creates the daily note if it doesn't exist. Ideal for logging work summaries.",
+      "Append content to today's daily note. Creates the note (inside Daily Notes / year / month folders) if it doesn't exist. Ideal for logging work summaries.",
       {
         content: z
           .string()
@@ -213,16 +217,22 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
           .describe("Date in YYYY-MM-DD format. Defaults to today."),
       },
       async ({ content, date }) => {
-        const targetDate =
-          date || new Date().toISOString().split("T")[0];
-        const title = `Daily Note — ${targetDate}`;
+        const d = date ? new Date(date + "T00:00:00") : new Date();
+        const title = d.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+        const yearStr = String(d.getFullYear());
+        const monthStr = d.toLocaleDateString("en-US", { month: "long" });
 
-        // Try to find existing daily note
+        // Try to find existing daily note by title
         const { data: existing } = await supabase
           .from("notes")
           .select("id, content")
           .eq("user_id", userId)
           .eq("title", title)
+          .eq("is_folder", false)
           .is("archived_at", null)
           .single();
 
@@ -257,31 +267,78 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
             content: [
               {
                 type: "text" as const,
-                text: `Appended to daily note for ${targetDate}.`,
+                text: `Appended to daily note "${title}".`,
               },
             ],
           };
         } else {
-          // Create new daily note
-          const { error } = await supabase.from("notes").insert({
-            user_id: userId,
-            title,
-            content: markdownToTiptap(content),
-          });
+          // Create folder hierarchy: Daily Notes / year / month
+          const findOrCreateFolder = async (
+            folderTitle: string,
+            parentId: string | null
+          ): Promise<string> => {
+            const { data: folder } = await supabase
+              .from("notes")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("title", folderTitle)
+              .eq("is_folder", true)
+              .eq("parent_id", parentId)
+              .is("archived_at", null)
+              .single();
 
-          if (error) {
+            if (folder) return folder.id;
+
+            const { data: created, error } = await supabase
+              .from("notes")
+              .insert({
+                user_id: userId,
+                title: folderTitle,
+                is_folder: true,
+                parent_id: parentId,
+              })
+              .select("id")
+              .single();
+
+            if (error || !created) throw new Error(error?.message || "Failed to create folder");
+            return created.id;
+          };
+
+          try {
+            const rootId = await findOrCreateFolder("Daily Notes", null);
+            const yearId = await findOrCreateFolder(yearStr, rootId);
+            const monthId = await findOrCreateFolder(monthStr, yearId);
+
+            const { error } = await supabase.from("notes").insert({
+              user_id: userId,
+              title,
+              content: markdownToTiptap(content),
+              parent_id: monthId,
+            });
+
+            if (error) {
+              return {
+                content: [{ type: "text" as const, text: `Error: ${error.message}` }],
+              };
+            }
             return {
-              content: [{ type: "text" as const, text: `Error: ${error.message}` }],
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Created daily note "${title}".`,
+                },
+              ],
+            };
+          } catch (err) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `Error creating daily note: ${err instanceof Error ? err.message : String(err)}`,
+                },
+              ],
             };
           }
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Created daily note for ${targetDate}.`,
-              },
-            ],
-          };
         }
       }
     );
