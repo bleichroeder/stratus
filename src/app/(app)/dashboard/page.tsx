@@ -47,6 +47,8 @@ import { VaultSetupModal } from "@/components/vault/vault-setup-modal";
 import { VaultUnlockModal } from "@/components/vault/vault-unlock-modal";
 import { encryptContent, decryptContent, isEncryptedPayload } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/client";
+import { useRealtimeNotes } from "@/lib/useRealtimeNotes";
+import { useUnseenNotes } from "@/lib/useUnseenNotes";
 import { useAI } from "@/lib/useAI";
 import { tiptapToPlainText, plainTextToTiptapNodes, getTemplatePromptConfig } from "@/lib/ai";
 import { AIFillBanner } from "@/components/ai/ai-fill-banner";
@@ -218,6 +220,10 @@ export default function AppPage() {
       .catch(() => setUserTemplates([]));
   }, [loadNotes]);
 
+  // Realtime: sync notes from external changes (MCP, other tabs, etc.)
+  useRealtimeNotes(currentUserId, setNotes, activeTabId);
+  const { unseenIds, markSeen } = useUnseenNotes(notes);
+
   useEffect(() => {
     loadArchived();
   }, [showArchive, loadArchived]);
@@ -305,6 +311,7 @@ export default function AppPage() {
       ?? sharedWithMeNotes.find((n) => n.id === id);
     const title = note?.title ?? "Untitled";
 
+    markSeen(id);
     setTabs((prev) => {
       if (prev.some((t) => t.id === id)) return prev;
       return [...prev, { id, title }];
@@ -1226,6 +1233,7 @@ export default function AppPage() {
         creatingDailyNote={creatingDailyNote}
         sharedWithMeNotes={sharedWithMeNotes}
         collaborativeNoteIds={collaborativeNoteIds}
+        unseenNoteIds={unseenIds}
       />
 
       <main className="flex-1 flex flex-col overflow-hidden relative">

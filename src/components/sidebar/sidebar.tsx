@@ -69,6 +69,7 @@ interface SidebarProps {
   creatingDailyNote?: boolean;
   sharedWithMeNotes?: Note[];
   collaborativeNoteIds?: Set<string>;
+  unseenNoteIds?: Set<string>;
   onCreateFromTemplate?: (parentId: string | null) => void;
 }
 
@@ -94,6 +95,7 @@ function NoteTreeItem({
   onDragLeave,
   onDrop,
   collaborativeNoteIds,
+  unseenNoteIds,
   onCreateFromTemplate,
   isMobile = false,
   onMoveNote,
@@ -119,6 +121,7 @@ function NoteTreeItem({
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string) => void;
   collaborativeNoteIds: Set<string>;
+  unseenNoteIds: Set<string>;
   onCreateFromTemplate?: (parentId: string | null) => void;
   isMobile?: boolean;
   onMoveNote?: (noteId: string, newParentId: string | null) => void;
@@ -264,6 +267,9 @@ function NoteTreeItem({
         ) : (
           <>
             <span className="truncate flex-1">{note.title}</span>
+            {!note.is_folder && unseenNoteIds.has(note.id) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+            )}
             {!note.is_folder && collaborativeNoteIds.has(note.id) && (
               <Users size={10} className="shrink-0 text-blue-500 dark:text-blue-400" />
             )}
@@ -449,6 +455,7 @@ function NoteTreeItem({
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           collaborativeNoteIds={collaborativeNoteIds}
+          unseenNoteIds={unseenNoteIds}
           onCreateFromTemplate={onCreateFromTemplate}
           isMobile={isMobile}
           onMoveNote={onMoveNote}
@@ -480,6 +487,7 @@ function NoteTree({
   onDragLeave,
   onDrop,
   collaborativeNoteIds,
+  unseenNoteIds,
   onCreateFromTemplate,
   isMobile = false,
   onMoveNote,
@@ -505,6 +513,7 @@ function NoteTree({
   onDragLeave: () => void;
   onDrop: (e: React.DragEvent, targetId: string) => void;
   collaborativeNoteIds: Set<string>;
+  unseenNoteIds: Set<string>;
   onCreateFromTemplate?: (parentId: string | null) => void;
   isMobile?: boolean;
   onMoveNote?: (noteId: string, newParentId: string | null) => void;
@@ -542,6 +551,7 @@ function NoteTree({
           onDragLeave={onDragLeave}
           onDrop={onDrop}
           collaborativeNoteIds={collaborativeNoteIds}
+          unseenNoteIds={unseenNoteIds}
           onCreateFromTemplate={onCreateFromTemplate}
           isMobile={isMobile}
           onMoveNote={onMoveNote}
@@ -576,6 +586,7 @@ export function Sidebar({
   creatingDailyNote = false,
   sharedWithMeNotes = [],
   collaborativeNoteIds = new Set(),
+  unseenNoteIds = new Set(),
   onCreateFromTemplate,
 }: SidebarProps) {
   const [search, setSearch] = useState("");
@@ -1079,6 +1090,7 @@ export function Sidebar({
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 collaborativeNoteIds={collaborativeNoteIds}
+                unseenNoteIds={unseenNoteIds}
                 onCreateFromTemplate={onCreateFromTemplate}
                 isMobile={isMobile}
                 onMoveNote={onMoveNote}
@@ -1236,6 +1248,7 @@ export function Sidebar({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             collaborativeNoteIds={collaborativeNoteIds}
+            unseenNoteIds={unseenNoteIds}
             onCreateFromTemplate={onCreateFromTemplate}
             isMobile={isMobile}
             onMoveNote={onMoveNote}
