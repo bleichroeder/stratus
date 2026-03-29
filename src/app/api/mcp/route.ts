@@ -1,27 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { NextRequest } from "next/server";
-import { authenticateApiKey, type ApiKeyRecord } from "@/lib/mcp/auth";
+import { authenticateApiKey } from "@/lib/mcp/auth";
 import { registerTools } from "@/lib/mcp/tools";
 
-// Cache server instances per API key so initialization state persists
-// across requests within the same serverless function instance.
-// MCP requires: initialize → initialized → tools/list. Without caching,
-// each request creates a fresh uninitialized server and tools/list fails.
-const serverCache = new Map<string, McpServer>();
-
-function getOrCreateServer(apiKey: ApiKeyRecord): McpServer {
-  let server = serverCache.get(apiKey.id);
-  if (!server) {
-    server = new McpServer({
-      name: "Stratus",
-      version: "1.0.0",
-    });
-    registerTools(server, apiKey);
-    serverCache.set(apiKey.id, server);
-  }
-  return server;
-}
+// Force Node.js runtime — crypto and Supabase need it
+export const runtime = "nodejs";
 
 async function handler(req: NextRequest) {
   const apiKey = await authenticateApiKey(req.headers.get("authorization"));
@@ -32,7 +16,14 @@ async function handler(req: NextRequest) {
     });
   }
 
-  const server = getOrCreateServer(apiKey);
+  // Create a fresh server + transport per request.
+  // Stateless mode (sessionIdGenerator: undefined) means each request
+  // is self-contained — no need to cache server instances.
+  const server = new McpServer({
+    name: "Stratus",
+    version: "1.0.0",
+  });
+  registerTools(server, apiKey);
 
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
