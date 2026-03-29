@@ -222,7 +222,7 @@ export default function AppPage() {
 
   // Realtime: sync notes from external changes (MCP, other tabs, etc.)
   useRealtimeNotes(currentUserId, setNotes, activeTabId);
-  const { unseenIds, markSeen } = useUnseenNotes(notes);
+  const { unseenIds, markSeen } = useUnseenNotes(notes, activeTabId);
 
   useEffect(() => {
     loadArchived();

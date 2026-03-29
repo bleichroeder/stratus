@@ -34,9 +34,11 @@ function getAncestorIds(noteId: string, parentMap: Map<string, string | null>): 
  * Tracks which notes have been updated since the user last viewed them.
  * Returns a Set of "unseen" note IDs (including ancestor folders) and a markSeen function.
  */
-export function useUnseenNotes(notes: Note[]) {
+export function useUnseenNotes(notes: Note[], activeNoteId: string | null) {
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
   const viewedRef = useRef<Record<string, string>>(loadViewedMap());
+  const activeNoteIdRef = useRef(activeNoteId);
+  activeNoteIdRef.current = activeNoteId;
 
   // Build parent lookup map
   const parentMap = useMemo(() => {
@@ -47,6 +49,20 @@ export function useUnseenNotes(notes: Note[]) {
     return map;
   }, [notes]);
 
+  // Keep the viewed timestamp up to date for the active note.
+  // This handles save-on-open and any other writes that bump updated_at
+  // while the user is looking at the note.
+  useEffect(() => {
+    if (!activeNoteId) return;
+    const note = notes.find((n) => n.id === activeNoteId);
+    if (!note) return;
+    const viewed = viewedRef.current;
+    if (!viewed[note.id] || note.updated_at > viewed[note.id]) {
+      viewed[note.id] = note.updated_at;
+      saveViewedMap(viewed);
+    }
+  }, [notes, activeNoteId]);
+
   // Recompute unseen set whenever notes change
   useEffect(() => {
     const viewed = viewedRef.current;
@@ -54,6 +70,8 @@ export function useUnseenNotes(notes: Note[]) {
 
     for (const note of notes) {
       if (note.is_folder || note.is_template) continue;
+      // The active note is never unseen — the user is looking at it
+      if (note.id === activeNoteIdRef.current) continue;
       const lastViewed = viewed[note.id];
       if (!lastViewed || note.updated_at > lastViewed) {
         unseen.add(note.id);
@@ -69,9 +87,6 @@ export function useUnseenNotes(notes: Note[]) {
 
   // Mark a note as seen — update localStorage and remove from unseen set
   const markSeen = useCallback((noteId: string) => {
-    // Store the note's current updated_at (not "now") so that only genuinely
-    // new changes (with a later updated_at) will re-trigger the dot.
-    // Fall back to a far-future timestamp to suppress the dot if note isn't found.
     const note = notes.find((n) => n.id === noteId);
     const viewed = viewedRef.current;
     viewed[noteId] = note?.updated_at ?? "9999-12-31T23:59:59.999Z";
@@ -79,10 +94,12 @@ export function useUnseenNotes(notes: Note[]) {
     saveViewedMap(viewed);
 
     // Recompute the full unseen set from scratch to correctly clear ancestor folders
+    const activeId = activeNoteIdRef.current;
     setUnseenIds(() => {
       const unseen = new Set<string>();
       for (const note of notes) {
         if (note.is_folder || note.is_template) continue;
+        if (note.id === activeId) continue;
         const lastViewed = viewed[note.id];
         if (!lastViewed || note.updated_at > lastViewed) {
           unseen.add(note.id);
