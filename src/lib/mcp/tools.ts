@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createServiceClient } from "@/lib/supabase/service";
 import { tiptapToPlainText } from "@/lib/ai";
+import { markdownToTiptap } from "@/lib/import/markdown-to-tiptap";
 import { type ApiKeyRecord, hasScope } from "./auth";
 import type { Json } from "@/lib/types";
 
@@ -243,7 +244,7 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
             content: [],
           };
           const existingContent = (existingDoc.content as unknown[]) || [];
-          const newDoc = markdownToTiptap(content) as Record<string, unknown>;
+          const newDoc = markdownToTiptap(content);
           const newNodes = (newDoc.content as unknown[]) || [];
           const merged = {
             type: "doc",
@@ -380,33 +381,4 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
       }
     );
   }
-}
-
-/**
- * Convert markdown-ish text to minimal TipTap/ProseMirror JSON.
- * Handles headings (# ## ###), paragraphs, and preserves line breaks.
- */
-function markdownToTiptap(text: string): Json {
-  const lines = text.split("\n");
-  const content: Json[] = [];
-
-  for (const line of lines) {
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
-    if (headingMatch) {
-      content.push({
-        type: "heading",
-        attrs: { level: headingMatch[1].length },
-        content: [{ type: "text", text: headingMatch[2] }],
-      });
-    } else if (line.trim() === "") {
-      content.push({ type: "paragraph" });
-    } else {
-      content.push({
-        type: "paragraph",
-        content: [{ type: "text", text: line }],
-      });
-    }
-  }
-
-  return { type: "doc", content };
 }
