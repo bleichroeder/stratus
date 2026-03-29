@@ -50,6 +50,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useAI } from "@/lib/useAI";
 import { tiptapToPlainText, plainTextToTiptapNodes, getTemplatePromptConfig } from "@/lib/ai";
 import { AIFillBanner } from "@/components/ai/ai-fill-banner";
+import { FloatingOrbs } from "@/components/ui/floating-orbs";
 
 function todayString(): string {
   return new Date().toLocaleDateString("en-US", {
@@ -125,7 +126,6 @@ export default function AppPage() {
   // AI state
   const { generate: aiGenerate, loading: aiLoading } = useAI();
   const [aiFillBanner, setAiFillBanner] = useState<{ show: boolean; templateId: string | null }>({ show: false, templateId: null });
-  const [aiPromptOpen, setAiPromptOpen] = useState(false);
   const [aiTopicPromptOpen, setAiTopicPromptOpen] = useState(false);
   const [aiTopicTemplateId, setAiTopicTemplateId] = useState<string | null>(null);
 
@@ -551,33 +551,6 @@ export default function AppPage() {
       } as Json);
     }
   }, [aiGenerate, activeNote]);
-
-  const handleAIFreeform = useCallback(async (prompt: string) => {
-    const context = activeNote?.content ? tiptapToPlainText(activeNote.content) : undefined;
-    const result = await aiGenerate({
-      action: "freeform",
-      prompt,
-      context: context ? context.slice(0, 2000) : undefined,
-      noteTitle: activeNote?.title,
-    });
-    if (!result.ok) {
-      showToast(result.error);
-      return;
-    }
-    const nodes = plainTextToTiptapNodes(result.text);
-    if (editorRef.current && nodes.length > 0) {
-      editorRef.current.insertContent({ type: "doc", content: nodes } as Json);
-    }
-  }, [aiGenerate, activeNote]);
-
-  // Listen for slash command AI prompt event
-  useEffect(() => {
-    function handleSlashAI() {
-      setAiPromptOpen(true);
-    }
-    window.addEventListener("open-ai-prompt", handleSlashAI);
-    return () => window.removeEventListener("open-ai-prompt", handleSlashAI);
-  }, []);
 
   const handleCreateFolder = useCallback(
     (parentId?: string | null) => {
@@ -1215,8 +1188,12 @@ export default function AppPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center w-full">
-        <p className="text-stone-400 text-sm">Loading...</p>
+      <div className="flex h-screen items-center justify-center w-full relative bg-white dark:bg-stone-950 overflow-hidden">
+        <FloatingOrbs />
+        <div className="relative z-10 flex flex-col items-center gap-3">
+          <LogoFull size={32} />
+          <Loader2 size={16} className="animate-spin text-stone-300 dark:text-stone-600" />
+        </div>
       </div>
     );
   }
@@ -1440,20 +1417,6 @@ export default function AppPage() {
         onUnlock={unlock}
         onRecover={recoverVault}
         isOAuthUser={isOAuthOnlyUser}
-      />
-
-      {/* AI freeform prompt (slash command) */}
-      <PromptModal
-        open={aiPromptOpen}
-        onClose={() => setAiPromptOpen(false)}
-        onSubmit={(value) => {
-          setAiPromptOpen(false);
-          handleAIFreeform(value);
-        }}
-        title="AI Generate"
-        placeholder="Describe what you want to write..."
-        submitLabel="Generate"
-        loading={aiLoading}
       />
 
       {/* AI topic prompt (for meeting notes / TODO templates) */}

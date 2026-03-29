@@ -70,7 +70,7 @@ export function TemplateManagerModal({
                   <span className="flex-1 text-sm text-stone-900 dark:text-stone-100 truncate">
                     {t.title}
                   </span>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => setRenameTarget(t)}
                       className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-400 dark:text-stone-500"

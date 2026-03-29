@@ -30,6 +30,10 @@ import {
   User,
   Upload,
   LayoutTemplate,
+  MoreVertical,
+  FolderInput,
+  X,
+  Settings,
 } from "lucide-react";
 import type { VaultStatus } from "@/components/vault/vault-context";
 import type { Note } from "@/lib/types";
@@ -91,6 +95,8 @@ function NoteTreeItem({
   onDrop,
   collaborativeNoteIds,
   onCreateFromTemplate,
+  isMobile = false,
+  onMoveNote,
 }: {
   note: Note;
   notes: Note[];
@@ -114,10 +120,15 @@ function NoteTreeItem({
   onDrop: (e: React.DragEvent, targetId: string) => void;
   collaborativeNoteIds: Set<string>;
   onCreateFromTemplate?: (parentId: string | null) => void;
+  isMobile?: boolean;
+  onMoveNote?: (noteId: string, newParentId: string | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(note.title);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isExpanded = expandedFolders.has(note.id);
   const hasChildren = notes.some((n) => n.parent_id === note.id);
@@ -186,6 +197,29 @@ function NoteTreeItem({
           e.stopPropagation();
           startRename();
         }}
+        onTouchStart={() => {
+          if (!isMobile || editing) return;
+          longPressTimer.current = setTimeout(() => {
+            setShowContextMenu(true);
+          }, 500);
+        }}
+        onTouchEnd={() => {
+          if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+          }
+        }}
+        onTouchMove={() => {
+          if (longPressTimer.current) {
+            clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+          }
+        }}
+        onContextMenu={(e) => {
+          if (isMobile) {
+            e.preventDefault();
+          }
+        }}
       >
         {/* Tree guide lines */}
         {depth > 0 && Array.from({ length: depth }, (_, i) => (
@@ -235,7 +269,19 @@ function NoteTreeItem({
             )}
           </>
         )}
-        {!editing && (
+        {!editing && isMobile && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowContextMenu(true);
+            }}
+            className="p-0.5 rounded hover:bg-stone-300 dark:hover:bg-stone-600 ml-auto shrink-0"
+            title="Actions"
+          >
+            <MoreVertical size={14} />
+          </button>
+        )}
+        {!editing && !isMobile && (
           <div className="hidden group-hover:flex items-center gap-0.5">
             {note.is_folder && (
               <>
@@ -296,6 +342,90 @@ function NoteTreeItem({
           </div>
         )}
       </div>
+      {/* Mobile context menu */}
+      {showContextMenu && isMobile && (
+        <div className="fixed inset-0 z-50" onClick={() => { setShowContextMenu(false); setShowMoveMenu(false); }}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div
+            className="absolute bottom-0 left-0 right-0 bg-white dark:bg-stone-900 rounded-t-xl shadow-lg pb-safe"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 pt-3 pb-2 border-b border-stone-200 dark:border-stone-700">
+              <span className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">{note.title}</span>
+              <button onClick={() => { setShowContextMenu(false); setShowMoveMenu(false); }} className="p-1 rounded-md hover:bg-stone-100 dark:hover:bg-stone-800">
+                <X size={16} className="text-stone-500" />
+              </button>
+            </div>
+            {!showMoveMenu ? (
+              <div className="py-2">
+                <button
+                  onClick={() => { setShowContextMenu(false); startRename(); }}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                >
+                  <Pencil size={16} />
+                  <span>Rename</span>
+                </button>
+                {onMoveNote && (
+                  <button
+                    onClick={() => setShowMoveMenu(true)}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-sm text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                  >
+                    <FolderInput size={16} />
+                    <span>Move to folder</span>
+                  </button>
+                )}
+                {note.is_folder && (
+                  <>
+                    <button
+                      onClick={() => { setShowContextMenu(false); onCreateNote(note.id); }}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    >
+                      <FilePlus size={16} />
+                      <span>New note in folder</span>
+                    </button>
+                    <button
+                      onClick={() => { setShowContextMenu(false); onCreateFolder(note.id); }}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                    >
+                      <FolderPlus size={16} />
+                      <span>New subfolder</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => { setShowContextMenu(false); onDeleteNote(note.id); }}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <Trash2 size={16} />
+                  <span>Delete</span>
+                </button>
+              </div>
+            ) : (
+              <div className="py-2 max-h-64 overflow-y-auto">
+                <button
+                  onClick={() => { setShowContextMenu(false); setShowMoveMenu(false); onMoveNote!(note.id, null); }}
+                  className="flex items-center gap-3 w-full px-4 py-3 text-sm text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                >
+                  <Folder size={16} />
+                  <span>Root (no folder)</span>
+                </button>
+                {notes.filter((n) => n.is_folder && n.id !== note.id && n.parent_id !== note.id).map((folder) => (
+                  <button
+                    key={folder.id}
+                    onClick={() => { setShowContextMenu(false); setShowMoveMenu(false); onMoveNote!(note.id, folder.id); }}
+                    className={`flex items-center gap-3 w-full px-4 py-3 text-sm hover:bg-stone-100 dark:hover:bg-stone-800 ${
+                      note.parent_id === folder.id ? "text-blue-600 dark:text-blue-400 font-medium" : "text-stone-700 dark:text-stone-300"
+                    }`}
+                  >
+                    <Folder size={16} />
+                    <span>{folder.title}{note.parent_id === folder.id ? " (current)" : ""}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {note.is_folder && isExpanded && hasChildren && (
         <NoteTree
           notes={notes}
@@ -320,6 +450,8 @@ function NoteTreeItem({
           onDrop={onDrop}
           collaborativeNoteIds={collaborativeNoteIds}
           onCreateFromTemplate={onCreateFromTemplate}
+          isMobile={isMobile}
+          onMoveNote={onMoveNote}
         />
       )}
     </div>
@@ -349,6 +481,8 @@ function NoteTree({
   onDrop,
   collaborativeNoteIds,
   onCreateFromTemplate,
+  isMobile = false,
+  onMoveNote,
 }: {
   notes: Note[];
   parentId?: string | null;
@@ -372,6 +506,8 @@ function NoteTree({
   onDrop: (e: React.DragEvent, targetId: string) => void;
   collaborativeNoteIds: Set<string>;
   onCreateFromTemplate?: (parentId: string | null) => void;
+  isMobile?: boolean;
+  onMoveNote?: (noteId: string, newParentId: string | null) => void;
 }) {
   const children = notes.filter((n) => n.parent_id === parentId && !n.is_template);
   const sorted = [...children].sort((a, b) => {
@@ -407,6 +543,8 @@ function NoteTree({
           onDrop={onDrop}
           collaborativeNoteIds={collaborativeNoteIds}
           onCreateFromTemplate={onCreateFromTemplate}
+          isMobile={isMobile}
+          onMoveNote={onMoveNote}
         />
       ))}
     </div>
@@ -752,6 +890,14 @@ export function Sidebar({
                 <Upload size={14} />
                 <span>Import notes</span>
               </Link>
+              <Link
+                href="/settings"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <Settings size={14} />
+                <span>Settings</span>
+              </Link>
               <div className="border-t border-stone-200 dark:border-stone-800 mt-1 pt-1">
                 <Link
                   href="/terms"
@@ -792,11 +938,11 @@ export function Sidebar({
         <div className="flex items-center justify-between mb-2">
           <LogoFull size={22} />
           <button
-            onClick={() => setCollapsed(true)}
+            onClick={() => isMobile ? onCloseMobileMenu?.() : setCollapsed(true)}
             className="p-1.5 rounded-md hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-400 transition-colors"
-            title="Collapse sidebar"
+            title={isMobile ? "Close menu" : "Collapse sidebar"}
           >
-            <PanelLeftClose size={16} />
+            {isMobile ? <X size={16} /> : <PanelLeftClose size={16} />}
           </button>
         </div>
         <div className="relative">
@@ -934,6 +1080,8 @@ export function Sidebar({
                 onDrop={handleDrop}
                 collaborativeNoteIds={collaborativeNoteIds}
                 onCreateFromTemplate={onCreateFromTemplate}
+                isMobile={isMobile}
+                onMoveNote={onMoveNote}
               />
             </div>
           )}
@@ -1089,6 +1237,8 @@ export function Sidebar({
             onDrop={handleDrop}
             collaborativeNoteIds={collaborativeNoteIds}
             onCreateFromTemplate={onCreateFromTemplate}
+            isMobile={isMobile}
+            onMoveNote={onMoveNote}
           />
         )}
         {/* Drop hint when dragging */}
@@ -1184,6 +1334,14 @@ export function Sidebar({
               >
                 <Upload size={14} />
                 <span>Import notes</span>
+              </Link>
+              <Link
+                href="/settings"
+                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                onClick={() => setUserMenuOpen(false)}
+              >
+                <Settings size={14} />
+                <span>Settings</span>
               </Link>
               <div className="border-t border-stone-200 dark:border-stone-800 mt-1 pt-1">
                 <Link

@@ -103,6 +103,36 @@ export interface Database {
           role?: "editor" | "viewer";
         };
       };
+      api_keys: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes: string[];
+          last_used_at: string | null;
+          expires_at: string | null;
+          created_at: string;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          key_hash: string;
+          key_prefix: string;
+          scopes: string[];
+          expires_at?: string | null;
+        };
+        Update: {
+          name?: string;
+          scopes?: string[];
+          last_used_at?: string | null;
+          expires_at?: string | null;
+          revoked_at?: string | null;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -115,6 +145,7 @@ export type NoteInsert = Database["public"]["Tables"]["notes"]["Insert"];
 export type NoteUpdate = Database["public"]["Tables"]["notes"]["Update"];
 export type Tag = Database["public"]["Tables"]["tags"]["Row"];
 export type NoteCollaborator = Database["public"]["Tables"]["note_collaborators"]["Row"];
+export type ApiKey = Database["public"]["Tables"]["api_keys"]["Row"];
 
 export interface CalendarAttendee {
   email: string;

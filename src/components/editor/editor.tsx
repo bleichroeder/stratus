@@ -331,10 +331,13 @@ export function NoteEditor({
     }
     if (editor) {
       setTimeout(() => {
+        // emitUpdate: false prevents onUpdate from firing — this is a
+        // navigation load, not a user edit, so it should not trigger a save
         editor.commands.setContent(
           content
             ? (content as Record<string, unknown>)
-            : { type: "doc", content: [] }
+            : { type: "doc", content: [] },
+          { emitUpdate: false }
         );
       }, 0);
     }
