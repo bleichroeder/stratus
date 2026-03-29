@@ -41,28 +41,6 @@ export function useUnseenNotes(notes: Note[], activeNoteId: string | null) {
   const activeNoteIdRef = useRef(activeNoteId);
   activeNoteIdRef.current = activeNoteId;
 
-  // Seed the viewed map on first use — mark all existing notes as seen
-  // so only genuinely new/updated notes after this point show the dot.
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (seededRef.current || notes.length === 0) return;
-    if (localStorage.getItem(INITIALIZED_KEY)) {
-      seededRef.current = true;
-      return;
-    }
-    const viewed = viewedRef.current;
-    for (const note of notes) {
-      if (note.is_folder || note.is_template) continue;
-      if (!viewed[note.id]) {
-        viewed[note.id] = note.updated_at;
-      }
-    }
-    viewedRef.current = viewed;
-    saveViewedMap(viewed);
-    localStorage.setItem(INITIALIZED_KEY, "1");
-    seededRef.current = true;
-  }, [notes]);
-
   // Build parent lookup map
   const parentMap = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -86,9 +64,28 @@ export function useUnseenNotes(notes: Note[], activeNoteId: string | null) {
     }
   }, [notes, activeNoteId]);
 
-  // Recompute unseen set whenever notes change
+  // Recompute unseen set whenever notes change.
+  // On first run (no INITIALIZED_KEY), seed all notes as seen so only
+  // future changes show the dot.
   useEffect(() => {
+    if (notes.length === 0) return;
+
     const viewed = viewedRef.current;
+    const needsSeed = !localStorage.getItem(INITIALIZED_KEY);
+
+    if (needsSeed) {
+      for (const note of notes) {
+        if (note.is_folder || note.is_template) continue;
+        if (!viewed[note.id]) {
+          viewed[note.id] = note.updated_at;
+        }
+      }
+      saveViewedMap(viewed);
+      localStorage.setItem(INITIALIZED_KEY, "1");
+      setUnseenIds(new Set());
+      return;
+    }
+
     const unseen = new Set<string>();
 
     for (const note of notes) {
