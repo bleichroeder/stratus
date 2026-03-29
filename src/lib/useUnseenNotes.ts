@@ -55,7 +55,7 @@ export function useUnseenNotes(notes: Note[]) {
     for (const note of notes) {
       if (note.is_folder || note.is_template) continue;
       const lastViewed = viewed[note.id];
-      if (!lastViewed || new Date(note.updated_at) > new Date(lastViewed)) {
+      if (!lastViewed || note.updated_at > lastViewed) {
         unseen.add(note.id);
         // Bubble up to ancestor folders
         for (const ancestorId of getAncestorIds(note.id, parentMap)) {
@@ -69,9 +69,12 @@ export function useUnseenNotes(notes: Note[]) {
 
   // Mark a note as seen — update localStorage and remove from unseen set
   const markSeen = useCallback((noteId: string) => {
-    // Write to ref + localStorage immediately so the next recompute won't re-add it
+    // Store the note's current updated_at (not "now") so that only genuinely
+    // new changes (with a later updated_at) will re-trigger the dot.
+    // Fall back to a far-future timestamp to suppress the dot if note isn't found.
+    const note = notes.find((n) => n.id === noteId);
     const viewed = viewedRef.current;
-    viewed[noteId] = new Date().toISOString();
+    viewed[noteId] = note?.updated_at ?? "9999-12-31T23:59:59.999Z";
     viewedRef.current = viewed;
     saveViewedMap(viewed);
 
@@ -81,7 +84,7 @@ export function useUnseenNotes(notes: Note[]) {
       for (const note of notes) {
         if (note.is_folder || note.is_template) continue;
         const lastViewed = viewed[note.id];
-        if (!lastViewed || new Date(note.updated_at) > new Date(lastViewed)) {
+        if (!lastViewed || note.updated_at > lastViewed) {
           unseen.add(note.id);
           for (const ancestorId of getAncestorIds(note.id, parentMap)) {
             unseen.add(ancestorId);
