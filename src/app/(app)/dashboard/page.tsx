@@ -235,11 +235,18 @@ export default function AppPage() {
     setVaultFolderId(vf?.id ?? null);
   }, [notes, setVaultFolderId]);
 
+  // Track whether we should preserve the AI fill banner across the next tab change
+  const preserveAiFillBanner = useRef(false);
+
   // Load note content when active tab changes
   useEffect(() => {
     setSaveStatus("idle");
-    setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
-    setAiFillModalOpen(false);
+    if (preserveAiFillBanner.current) {
+      preserveAiFillBanner.current = false;
+    } else {
+      setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
+      setAiFillModalOpen(false);
+    }
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     if (!activeTabId) {
       setActiveNote(null);
@@ -418,15 +425,17 @@ export default function AppPage() {
         });
         setNotes((prev) => [note, ...prev]);
         setTabs((prev) => [...prev, { id: note.id, title: note.title }]);
-        setActiveTabId(note.id);
         setTemplateParentId(null);
-        // Show AI fill banner for templates
+        // Show AI fill banner for templates — set flag before changing tab
+        // so the tab-change effect doesn't immediately clear it
         const hint = template.builtIn
           ? getBuiltinContextHint(template.id)
           : template.contextHint;
         if (template.builtIn || hint.type !== "none") {
+          preserveAiFillBanner.current = true;
           setAiFillBanner({ show: true, templateId: template.id, contextHint: hint });
         }
+        setActiveTabId(note.id);
       } catch (err) {
         console.error("Failed to create note from template:", err);
       } finally {
