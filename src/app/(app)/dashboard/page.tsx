@@ -26,6 +26,7 @@ import {
   createTemplate,
   deleteTemplate,
   renameTemplate,
+  updateTemplateContextHint,
 } from "@/lib/notes";
 import type { NoteCollaborator } from "@/lib/types";
 import { notifyPartyKitRoom } from "@/lib/yjs/notify";
@@ -41,7 +42,7 @@ import { LogoFull } from "@/components/ui/logo";
 import { Dashboard } from "@/components/dashboard/dashboard";
 import { TemplatePickerModal } from "@/components/templates/template-picker-modal";
 import { TemplateManagerModal } from "@/components/templates/template-manager-modal";
-import { getAllTemplates, buildTemplate, type TemplateItem } from "@/lib/templates";
+import { getAllTemplates, buildTemplate, getBuiltinContextHint, type TemplateItem, type ContextHint, CONTEXT_HINT_NONE } from "@/lib/templates";
 import { VaultProvider, useVault } from "@/components/vault/vault-context";
 import { VaultSetupModal } from "@/components/vault/vault-setup-modal";
 import { VaultUnlockModal } from "@/components/vault/vault-unlock-modal";
@@ -50,8 +51,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useRealtimeNotes } from "@/lib/useRealtimeNotes";
 import { useUnseenNotes } from "@/lib/useUnseenNotes";
 import { useAI } from "@/lib/useAI";
-import { tiptapToPlainText, plainTextToTiptapNodes, getTemplatePromptConfig } from "@/lib/ai";
+import { tiptapToPlainText, plainTextToTiptapNodes, type ContextNoteInput } from "@/lib/ai";
 import { AIFillBanner } from "@/components/ai/ai-fill-banner";
+import { AIFillModal, type ContextNote } from "@/components/ai/ai-fill-modal";
 import { FloatingOrbs } from "@/components/ui/floating-orbs";
 
 function todayString(): string {
@@ -127,9 +129,8 @@ export default function AppPage() {
 
   // AI state
   const { generate: aiGenerate, loading: aiLoading } = useAI();
-  const [aiFillBanner, setAiFillBanner] = useState<{ show: boolean; templateId: string | null }>({ show: false, templateId: null });
-  const [aiTopicPromptOpen, setAiTopicPromptOpen] = useState(false);
-  const [aiTopicTemplateId, setAiTopicTemplateId] = useState<string | null>(null);
+  const [aiFillBanner, setAiFillBanner] = useState<{ show: boolean; templateId: string | null; contextHint: ContextHint }>({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
+  const [aiFillModalOpen, setAiFillModalOpen] = useState(false);
 
   // Loading / feedback states
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
@@ -237,7 +238,8 @@ export default function AppPage() {
   // Load note content when active tab changes
   useEffect(() => {
     setSaveStatus("idle");
-    setAiFillBanner({ show: false, templateId: null });
+    setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
+    setAiFillModalOpen(false);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     if (!activeTabId) {
       setActiveNote(null);
@@ -418,9 +420,12 @@ export default function AppPage() {
         setTabs((prev) => [...prev, { id: note.id, title: note.title }]);
         setActiveTabId(note.id);
         setTemplateParentId(null);
-        // Show AI fill banner for built-in templates
-        if (template.builtIn) {
-          setAiFillBanner({ show: true, templateId: template.id });
+        // Show AI fill banner for templates
+        const hint = template.builtIn
+          ? getBuiltinContextHint(template.id)
+          : template.contextHint;
+        if (template.builtIn || hint.type !== "none") {
+          setAiFillBanner({ show: true, templateId: template.id, contextHint: hint });
         }
       } catch (err) {
         console.error("Failed to create note from template:", err);
@@ -496,6 +501,17 @@ export default function AppPage() {
     }
   }, []);
 
+  const handleTemplateContextHintChange = useCallback(async (id: string, hint: ContextHint) => {
+    try {
+      await updateTemplateContextHint(id, hint);
+      setUserTemplates((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, context_hint: hint as unknown as Json } : t))
+      );
+    } catch (err) {
+      console.error("Failed to update template context hint:", err);
+    }
+  }, []);
+
   // Listen for slash command template picker event
   useEffect(() => {
     function handleSlashTemplate() {
@@ -507,12 +523,24 @@ export default function AppPage() {
 
   // --- AI handlers ---
 
-  const handleAIFill = useCallback(async (templateId: string, userPrompt?: string) => {
+  const handleAIFill = useCallback(async (params: {
+    contextNotes: ContextNote[];
+    instructions?: string;
+  }) => {
+    const templateId = aiFillBanner.templateId;
+    if (!templateId) return;
+
+    const contextNotes: ContextNoteInput[] = params.contextNotes.map((n) => ({
+      title: n.title,
+      content: n.content,
+    }));
+
     const result = await aiGenerate({
       action: "template-fill",
       templateId,
-      prompt: userPrompt,
+      prompt: params.instructions,
       noteTitle: activeNote?.title,
+      contextNotes: contextNotes.length > 0 ? contextNotes : undefined,
     });
     if (!result.ok) {
       showToast(result.error);
@@ -522,8 +550,9 @@ export default function AppPage() {
     if (editorRef.current && nodes.length > 0) {
       editorRef.current.insertContent({ type: "doc", content: nodes } as Json);
     }
-    setAiFillBanner({ show: false, templateId: null });
-  }, [aiGenerate, activeNote]);
+    setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
+    setAiFillModalOpen(false);
+  }, [aiGenerate, activeNote, aiFillBanner.templateId]);
 
   const handleSummarize = useCallback(async () => {
     if (!activeNote?.content) return;
@@ -819,8 +848,14 @@ export default function AppPage() {
     [activeTabId]
   );
 
+  const dailyNoteInFlight = useRef(false);
+
   const handleDailyNote = useCallback(async () => {
+    // Guard against concurrent calls
+    if (dailyNoteInFlight.current) return;
+    dailyNoteInFlight.current = true;
     setCreatingDailyNote(true);
+
     const title = todayString();
     const now = new Date();
     const yearStr = String(now.getFullYear());
@@ -833,18 +868,48 @@ export default function AppPage() {
     if (existing) {
       openTab(existing.id);
       setCreatingDailyNote(false);
+      dailyNoteInFlight.current = false;
       return;
     }
 
-    // Track newly created folders locally to avoid stale state lookups
+    // Query the database for existing folders to avoid duplicates.
+    // Client-side state may be stale (e.g. folders created by MCP tools).
+    const supabase = createClient();
+    const { data: allFolders } = await supabase
+      .from("notes")
+      .select("id, title, parent_id")
+      .eq("is_folder", true)
+      .is("archived_at", null)
+      .in("title", ["Daily Notes", yearStr, monthStr]);
+    const dbFolders = allFolders ?? [];
+
+    // Also check DB for existing daily note (may have been created by MCP)
+    const { data: existingNote } = await supabase
+      .from("notes")
+      .select("id, title")
+      .eq("title", title)
+      .eq("is_folder", false)
+      .is("archived_at", null)
+      .maybeSingle();
+
+    if (existingNote) {
+      // Note exists in DB but not in client state — refresh and open
+      const fullNote = await getNote(existingNote.id);
+      if (fullNote) {
+        setNotes((prev) => prev.some((n) => n.id === fullNote.id) ? prev : [fullNote, ...prev]);
+        openTab(fullNote.id);
+      }
+      setCreatingDailyNote(false);
+      dailyNoteInFlight.current = false;
+      return;
+    }
+
     const created: Note[] = [];
-    const findIn = (predicate: (n: Note) => boolean): Note | undefined =>
-      notes.find(predicate) ?? created.find(predicate);
 
     // Find or create "Daily Notes" root folder
-    let rootFolder = findIn(
-      (n) => n.title === "Daily Notes" && n.is_folder && n.parent_id === null
-    );
+    let rootFolder = dbFolders.find(
+      (f) => f.title === "Daily Notes" && f.parent_id === null
+    ) as Note | undefined;
     if (!rootFolder) {
       try {
         rootFolder = await createNote({
@@ -856,14 +921,15 @@ export default function AppPage() {
       } catch (err) {
         console.error("Failed to create Daily Notes folder:", err);
         setCreatingDailyNote(false);
+        dailyNoteInFlight.current = false;
         return;
       }
     }
 
     // Find or create year subfolder (e.g. "2026")
-    let yearFolder = findIn(
-      (n) => n.title === yearStr && n.is_folder && n.parent_id === rootFolder!.id
-    );
+    let yearFolder = dbFolders.find(
+      (f) => f.title === yearStr && f.parent_id === rootFolder!.id
+    ) as Note | undefined;
     if (!yearFolder) {
       try {
         yearFolder = await createNote({
@@ -875,14 +941,15 @@ export default function AppPage() {
       } catch (err) {
         console.error("Failed to create year folder:", err);
         setCreatingDailyNote(false);
+        dailyNoteInFlight.current = false;
         return;
       }
     }
 
     // Find or create month subfolder (e.g. "March")
-    let monthFolder = findIn(
-      (n) => n.title === monthStr && n.is_folder && n.parent_id === yearFolder!.id
-    );
+    let monthFolder = dbFolders.find(
+      (f) => f.title === monthStr && f.parent_id === yearFolder!.id
+    ) as Note | undefined;
     if (!monthFolder) {
       try {
         monthFolder = await createNote({
@@ -894,6 +961,7 @@ export default function AppPage() {
       } catch (err) {
         console.error("Failed to create month folder:", err);
         setCreatingDailyNote(false);
+        dailyNoteInFlight.current = false;
         return;
       }
     }
@@ -906,17 +974,25 @@ export default function AppPage() {
         is_folder: false,
       });
       // Batch all new items into state at once
-      setNotes((prev) => [dailyNote, ...created, ...prev]);
+      setNotes((prev) => {
+        const existingIds = new Set(prev.map((n) => n.id));
+        const newItems = [dailyNote, ...created].filter((n) => !existingIds.has(n.id));
+        return [...newItems, ...prev];
+      });
       setTabs((prev) => [...prev, { id: dailyNote.id, title: dailyNote.title }]);
       setActiveTabId(dailyNote.id);
     } catch (err) {
       console.error("Failed to create daily note:", err);
-      // Still add any created folders to state
       if (created.length > 0) {
-        setNotes((prev) => [...created, ...prev]);
+        setNotes((prev) => {
+          const existingIds = new Set(prev.map((n) => n.id));
+          const newItems = created.filter((n) => !existingIds.has(n.id));
+          return [...newItems, ...prev];
+        });
       }
     } finally {
       setCreatingDailyNote(false);
+      dailyNoteInFlight.current = false;
     }
   }, [notes]);
 
@@ -1281,16 +1357,8 @@ export default function AppPage() {
           {aiFillBanner.show && aiFillBanner.templateId && (
             <AIFillBanner
               loading={aiLoading}
-              onFill={() => {
-                const config = getTemplatePromptConfig(aiFillBanner.templateId!);
-                if (config?.needsTopic) {
-                  setAiTopicTemplateId(aiFillBanner.templateId);
-                  setAiTopicPromptOpen(true);
-                } else {
-                  handleAIFill(aiFillBanner.templateId!);
-                }
-              }}
-              onDismiss={() => setAiFillBanner({ show: false, templateId: null })}
+              onFill={() => setAiFillModalOpen(true)}
+              onDismiss={() => setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE })}
             />
           )}
           <NoteEditor
@@ -1410,6 +1478,7 @@ export default function AppPage() {
         templates={getAllTemplates(userTemplates)}
         onDelete={handleDeleteTemplate}
         onRename={handleRenameTemplate}
+        onContextHintChange={handleTemplateContextHintChange}
       />
 
       <VaultSetupModal
@@ -1427,22 +1496,17 @@ export default function AppPage() {
         isOAuthUser={isOAuthOnlyUser}
       />
 
-      {/* AI topic prompt (for meeting notes / TODO templates) */}
-      <PromptModal
-        open={aiTopicPromptOpen}
-        onClose={() => { setAiTopicPromptOpen(false); setAiTopicTemplateId(null); }}
-        onSubmit={(value) => {
-          setAiTopicPromptOpen(false);
-          if (aiTopicTemplateId) {
-            handleAIFill(aiTopicTemplateId, value);
-          }
-          setAiTopicTemplateId(null);
-        }}
-        title={aiTopicTemplateId === "builtin-meeting-notes" ? "Meeting topic" : "What's your goal?"}
-        placeholder={aiTopicTemplateId === "builtin-meeting-notes" ? "e.g. Q2 planning, sprint retro..." : "e.g. Launch blog, refactor auth..."}
-        submitLabel="Generate"
-        loading={aiLoading}
-      />
+      {/* AI Fill Modal (context-aware template filling) */}
+      {aiFillBanner.templateId && (
+        <AIFillModal
+          open={aiFillModalOpen}
+          onClose={() => setAiFillModalOpen(false)}
+          templateId={aiFillBanner.templateId}
+          contextHint={aiFillBanner.contextHint}
+          onGenerate={handleAIFill}
+          loading={aiLoading}
+        />
+      )}
 
       {/* Toast notification */}
       {toast && (

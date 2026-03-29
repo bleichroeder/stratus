@@ -2,8 +2,14 @@
 
 import { useState } from "react";
 import { Modal, ConfirmModal, PromptModal } from "@/components/ui/modal";
-import { type TemplateItem } from "@/lib/templates";
-import { LayoutTemplate, Pencil, Trash2, Lock } from "lucide-react";
+import { type TemplateItem, type ContextHint, type ContextHintType, CONTEXT_HINT_NONE } from "@/lib/templates";
+import { LayoutTemplate, Pencil, Trash2, Lock, Sparkles } from "lucide-react";
+
+const CONTEXT_HINT_OPTIONS: { value: ContextHintType; label: string }[] = [
+  { value: "none", label: "No suggestion" },
+  { value: "daily_recent", label: "Recent daily notes" },
+  { value: "daily_week", label: "This week's daily notes" },
+];
 
 interface TemplateManagerModalProps {
   open: boolean;
@@ -11,6 +17,7 @@ interface TemplateManagerModalProps {
   templates: TemplateItem[];
   onDelete: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
+  onContextHintChange?: (id: string, hint: ContextHint) => void;
 }
 
 export function TemplateManagerModal({
@@ -19,6 +26,7 @@ export function TemplateManagerModal({
   templates,
   onDelete,
   onRename,
+  onContextHintChange,
 }: TemplateManagerModalProps) {
   const [deleteTarget, setDeleteTarget] = useState<TemplateItem | null>(null);
   const [renameTarget, setRenameTarget] = useState<TemplateItem | null>(null);
@@ -62,30 +70,55 @@ export function TemplateManagerModal({
               {custom.map((t) => (
                 <div
                   key={t.id}
-                  className="flex items-center gap-3 px-3 py-2 rounded-md group hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                  className="px-3 py-2 rounded-md group hover:bg-stone-50 dark:hover:bg-stone-800/50"
                 >
-                  <span className="shrink-0 text-stone-400 dark:text-stone-500">
-                    <LayoutTemplate size={16} />
-                  </span>
-                  <span className="flex-1 text-sm text-stone-900 dark:text-stone-100 truncate">
-                    {t.title}
-                  </span>
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      onClick={() => setRenameTarget(t)}
-                      className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-400 dark:text-stone-500"
-                      title="Rename"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(t)}
-                      className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400"
-                      title="Delete"
-                    >
-                      <Trash2 size={12} />
-                    </button>
+                  <div className="flex items-center gap-3">
+                    <span className="shrink-0 text-stone-400 dark:text-stone-500">
+                      <LayoutTemplate size={16} />
+                    </span>
+                    <span className="flex-1 text-sm text-stone-900 dark:text-stone-100 truncate">
+                      {t.title}
+                    </span>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => setRenameTarget(t)}
+                        className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-400 dark:text-stone-500"
+                        title="Rename"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(t)}
+                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 dark:text-stone-500 hover:text-red-600 dark:hover:text-red-400"
+                        title="Delete"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
                   </div>
+                  {/* Context hint selector */}
+                  {onContextHintChange && (
+                    <div className="flex items-center gap-1.5 mt-1.5 ml-7">
+                      <Sparkles size={10} className="text-violet-400" />
+                      <select
+                        value={t.contextHint.type}
+                        onChange={(e) => {
+                          const type = e.target.value as ContextHintType;
+                          const hint: ContextHint = type === "none"
+                            ? CONTEXT_HINT_NONE
+                            : { type };
+                          onContextHintChange(t.id, hint);
+                        }}
+                        className="text-[11px] bg-transparent border border-stone-200 dark:border-stone-700 rounded px-1.5 py-0.5 text-stone-500 dark:text-stone-400 focus:outline-none focus:border-violet-500"
+                      >
+                        {CONTEXT_HINT_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

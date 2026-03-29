@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { AIAction } from "@/lib/ai";
+import type { AIAction, ContextNoteInput } from "@/lib/ai";
 
 interface AIParams {
   action: AIAction;
@@ -9,6 +9,7 @@ interface AIParams {
   prompt?: string;
   context?: string;
   noteTitle?: string;
+  contextNotes?: ContextNoteInput[];
 }
 
 export type AIResult = { ok: true; text: string } | { ok: false; error: string };

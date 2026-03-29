@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import type { Note, Json, NoteCollaborator } from "@/lib/types";
+import type { ContextHint } from "@/lib/templates";
 
 function getSupabase() {
   return createClient();
@@ -334,6 +335,16 @@ export async function renameTemplate(id: string, title: string): Promise<void> {
   const { error } = await supabase
     .from("notes")
     .update({ title })
+    .eq("id", id)
+    .eq("is_template", true);
+  if (error) throw error;
+}
+
+export async function updateTemplateContextHint(id: string, hint: ContextHint): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from("notes")
+    .update({ context_hint: hint as unknown as Json })
     .eq("id", id)
     .eq("is_template", true);
   if (error) throw error;

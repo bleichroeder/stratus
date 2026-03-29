@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { buildSystemPrompt, buildUserPrompt, type AIAction } from "@/lib/ai";
+import { buildSystemPrompt, buildUserPrompt, truncateContextNotes, type AIAction, type ContextNoteInput } from "@/lib/ai";
 
 const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
 
@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     prompt?: string;
     context?: string;
     noteTitle?: string;
+    contextNotes?: ContextNoteInput[];
   };
 
   try {
@@ -34,12 +35,16 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid action" }, { status: 400 });
   }
 
-  const systemPrompt = buildSystemPrompt(action, body.templateId);
+  const contextNotes = body.contextNotes ? truncateContextNotes(body.contextNotes) : undefined;
+  const hasContext = !!contextNotes && contextNotes.length > 0;
+
+  const systemPrompt = buildSystemPrompt(action, body.templateId, hasContext);
   const userPrompt = buildUserPrompt(action, {
     context: body.context,
     noteTitle: body.noteTitle,
     prompt: body.prompt,
     templateId: body.templateId,
+    contextNotes,
   });
 
   try {
@@ -55,7 +60,7 @@ export async function POST(request: Request) {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        max_tokens: 1024,
+        max_tokens: hasContext ? 2048 : 1024,
         temperature: 0.7,
       }),
     });

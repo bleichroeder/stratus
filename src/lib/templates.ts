@@ -1,10 +1,21 @@
 import type { Json, Note } from "@/lib/types";
 
+export type ContextHintType = "none" | "daily_recent" | "daily_week" | "tagged";
+
+export interface ContextHint {
+  type: ContextHintType;
+  tag_id?: string;
+  days?: number;
+}
+
+export const CONTEXT_HINT_NONE: ContextHint = { type: "none" };
+
 export interface TemplateItem {
   id: string;
   title: string;
   content: Json;
   builtIn: boolean;
+  contextHint: ContextHint;
 }
 
 function taskList(items: string[]): Json {
@@ -119,6 +130,7 @@ function detectEnvironment(): string[] {
 interface BuiltinTemplateDef {
   id: string;
   titleLabel: string;
+  contextHint: ContextHint;
   build: () => { title: string; content: Json };
 }
 
@@ -126,6 +138,7 @@ const BUILTIN_DEFS: BuiltinTemplateDef[] = [
   {
     id: "builtin-daily-standup",
     titleLabel: "Daily Standup",
+    contextHint: { type: "daily_recent", days: 1 },
     build: () => {
       const date = todayFormatted();
       return {
@@ -145,6 +158,7 @@ const BUILTIN_DEFS: BuiltinTemplateDef[] = [
   {
     id: "builtin-meeting-notes",
     titleLabel: "Meeting Notes",
+    contextHint: { type: "none" },
     build: () => {
       const date = todayFormatted();
       return {
@@ -166,6 +180,7 @@ const BUILTIN_DEFS: BuiltinTemplateDef[] = [
   {
     id: "builtin-weekly-review",
     titleLabel: "Weekly Review",
+    contextHint: { type: "daily_week" },
     build: () => {
       const range = weekRangeFormatted();
       return {
@@ -185,6 +200,7 @@ const BUILTIN_DEFS: BuiltinTemplateDef[] = [
   {
     id: "builtin-bug-report",
     titleLabel: "Bug Report",
+    contextHint: { type: "none" },
     build: () => {
       const date = todayFormatted();
       const env = detectEnvironment();
@@ -208,6 +224,7 @@ const BUILTIN_DEFS: BuiltinTemplateDef[] = [
   {
     id: "builtin-todo-list",
     titleLabel: "TODO List",
+    contextHint: { type: "none" },
     build: () => {
       const date = todayFormatted();
       return {
@@ -227,6 +244,7 @@ export const BUILTIN_TEMPLATES: TemplateItem[] = BUILTIN_DEFS.map((d) => ({
   title: d.titleLabel,
   content: d.build().content,
   builtIn: true,
+  contextHint: d.contextHint,
 }));
 
 // Call this at creation time to get fresh dynamic content
@@ -235,14 +253,34 @@ export function buildTemplate(id: string): { title: string; content: Json } | nu
   return def ? def.build() : null;
 }
 
+function parseContextHint(raw: unknown): ContextHint {
+  if (!raw || typeof raw !== "object") return CONTEXT_HINT_NONE;
+  const obj = raw as Record<string, unknown>;
+  const type = obj.type;
+  if (type === "daily_recent" || type === "daily_week" || type === "tagged") {
+    return {
+      type,
+      ...(typeof obj.tag_id === "string" ? { tag_id: obj.tag_id } : {}),
+      ...(typeof obj.days === "number" ? { days: obj.days } : {}),
+    };
+  }
+  return CONTEXT_HINT_NONE;
+}
+
 export function getAllTemplates(userTemplates: Note[]): TemplateItem[] {
   const custom: TemplateItem[] = userTemplates.map((n) => ({
     id: n.id,
     title: n.title,
     content: n.content ?? doc(paragraph("")),
     builtIn: false,
+    contextHint: parseContextHint(n.context_hint),
   }));
   return [...BUILTIN_TEMPLATES, ...custom];
+}
+
+export function getBuiltinContextHint(templateId: string): ContextHint {
+  const def = BUILTIN_DEFS.find((d) => d.id === templateId);
+  return def?.contextHint ?? CONTEXT_HINT_NONE;
 }
 
 export function extractTemplatePreview(content: Json): string {

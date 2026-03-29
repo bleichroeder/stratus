@@ -22,6 +22,7 @@ export interface Database {
           shared_token: string | null;
           shared_at: string | null;
           encrypted: boolean;
+          context_hint: Json | null;
           created_at: string;
           updated_at: string;
         };
@@ -34,6 +35,7 @@ export interface Database {
           is_folder?: boolean;
           is_template?: boolean;
           encrypted?: boolean;
+          context_hint?: Json | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -46,6 +48,7 @@ export interface Database {
           is_folder?: boolean;
           is_template?: boolean;
           encrypted?: boolean;
+          context_hint?: Json | null;
           created_at?: string;
           updated_at?: string;
         };

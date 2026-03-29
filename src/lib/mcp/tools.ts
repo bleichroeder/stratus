@@ -278,15 +278,19 @@ export function registerTools(server: McpServer, apiKey: ApiKeyRecord) {
             folderTitle: string,
             parentId: string | null
           ): Promise<string> => {
-            const { data: folder } = await supabase
+            let query = supabase
               .from("notes")
               .select("id")
               .eq("user_id", userId)
               .eq("title", folderTitle)
               .eq("is_folder", true)
-              .eq("parent_id", parentId)
-              .is("archived_at", null)
-              .single();
+              .is("archived_at", null);
+
+            query = parentId === null
+              ? query.is("parent_id", null)
+              : query.eq("parent_id", parentId);
+
+            const { data: folder } = await query.single();
 
             if (folder) return folder.id;
 
