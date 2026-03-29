@@ -55,9 +55,10 @@ interface NoteEditorProps {
   isInsideVault?: boolean;
   collaborators?: NoteCollaborator[];
   onCollaboratorsChange?: (collaborators: NoteCollaborator[]) => void;
-  editorRef?: React.MutableRefObject<{ insertContent: (content: Json) => void } | null>;
+  editorRef?: React.MutableRefObject<{ insertContent: (content: Json) => void; setContent: (content: Json) => void } | null>;
   onSummarize?: () => void;
   aiLoading?: boolean;
+  bannerSlot?: React.ReactNode;
 }
 
 export function NoteEditor({
@@ -85,6 +86,7 @@ export function NoteEditor({
   editorRef,
   onSummarize,
   aiLoading,
+  bannerSlot,
 }: NoteEditorProps) {
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const noteIdRef = useRef(noteId);
@@ -362,6 +364,9 @@ export function NoteEditor({
                 editor.chain().focus().insertContent(doc.content as unknown[]).run();
               }
             },
+            setContent: (content: Json) => {
+              editor.commands.setContent(content as Record<string, unknown>);
+            },
           }
         : null;
     }
@@ -409,6 +414,7 @@ export function NoteEditor({
           </div>
         )}
       </div>
+      {bannerSlot}
       <div className="flex-1 overflow-y-auto relative">
         {/* Viewer badge */}
         {collaboratorRole === "viewer" && (

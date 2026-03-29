@@ -156,7 +156,7 @@ export function AIFillModal({
 
   return (
     <Modal open={open} onClose={loading ? () => {} : onClose} title="Fill with AI">
-      <div className="space-y-4 max-h-[70vh] overflow-y-auto -mx-4 px-4">
+      <div className="space-y-4 max-h-[50vh] sm:max-h-[70vh] overflow-y-auto -mx-4 px-4">
         {/* Suggested notes */}
         {suggestionsLoading ? (
           <div className="flex items-center gap-2 py-3 text-sm text-stone-400 dark:text-stone-500">
@@ -168,7 +168,7 @@ export function AIFillModal({
             <label className="text-xs font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
               Context Notes
               {selectedCount > 0 && (
-                <span className="ml-1.5 normal-case tracking-normal text-violet-500">
+                <span className="ml-1.5 normal-case tracking-normal text-stone-500 dark:text-stone-400">
                   ({selectedCount} selected)
                 </span>
               )}
@@ -223,7 +223,7 @@ export function AIFillModal({
               value={searchQuery}
               onChange={(e) => handleSearch(e.target.value)}
               placeholder="Search notes to add as context..."
-              className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:border-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-500"
             />
             {searching && (
               <Loader2
@@ -240,9 +240,9 @@ export function AIFillModal({
                 <button
                   key={result.id}
                   onClick={() => addManualNote(result)}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors border-b border-stone-100 dark:border-stone-800 last:border-0"
+                  className="flex items-center gap-2 w-full px-3 py-2.5 sm:py-2 text-left text-sm hover:bg-stone-50 dark:hover:bg-stone-800 active:bg-stone-100 dark:active:bg-stone-800 transition-colors border-b border-stone-100 dark:border-stone-800 last:border-0"
                 >
-                  <Plus size={14} className="shrink-0 text-violet-500" />
+                  <Plus size={14} className="shrink-0 text-stone-500" />
                   <span className="truncate text-stone-900 dark:text-stone-100">
                     {result.title}
                   </span>
@@ -268,7 +268,7 @@ export function AIFillModal({
             onChange={(e) => setInstructions(e.target.value)}
             placeholder="Any specific guidance for the AI..."
             rows={2}
-            className="w-full px-3 py-2 text-sm rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 resize-none"
+            className="w-full px-3 py-2 text-sm rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:border-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-500 resize-none"
           />
         </div>
       </div>
@@ -278,14 +278,14 @@ export function AIFillModal({
         <button
           onClick={onClose}
           disabled={loading}
-          className="px-3 py-1.5 text-sm rounded-md text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
+          className="px-3 py-2 sm:py-1.5 text-sm rounded-md text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 disabled:opacity-50"
         >
           Cancel
         </button>
         <button
           onClick={handleGenerate}
           disabled={loading}
-          className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-md bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 sm:py-1.5 text-sm font-medium rounded-md bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 transition-colors"
         >
           {loading ? (
             <Loader2 size={14} className="animate-spin" />
@@ -313,18 +313,18 @@ function NoteCheckbox({
   suggested?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-stone-50 dark:hover:bg-stone-800/50 group">
-      <button onClick={onToggle} className="shrink-0">
+    <div className="flex items-center gap-2 px-2 py-2.5 sm:py-1.5 rounded-md hover:bg-stone-50 dark:hover:bg-stone-800/50 active:bg-stone-100 dark:active:bg-stone-800 group">
+      <button onClick={onToggle} className="shrink-0 p-0.5">
         <div
           className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
             checked
-              ? "bg-violet-600 border-violet-600"
+              ? "bg-stone-900 dark:bg-stone-100 border-stone-900 dark:border-stone-100"
               : "border-stone-300 dark:border-stone-600"
           }`}
         >
           {checked && (
             <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-              <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M1 4L3.5 6.5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white dark:text-stone-900" />
             </svg>
           )}
         </div>
@@ -339,14 +339,14 @@ function NoteCheckbox({
         </div>
       </div>
       {suggested && (
-        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400">
+        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400">
           Suggested
         </span>
       )}
       {onRemove && (
         <button
           onClick={onRemove}
-          className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-opacity"
+          className="shrink-0 p-1 sm:p-0.5 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 transition-opacity"
         >
           <X size={12} />
         </button>

@@ -32,7 +32,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
         if (e.target === overlayRef.current) onClose();
       }}
     >
-      <div className="w-full max-w-sm rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 shadow-xl">
+      <div className="w-full max-w-sm mx-4 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-stone-200 dark:border-stone-800">
           <h2 className="text-sm font-semibold text-stone-900 dark:text-stone-100">{title}</h2>
           <button

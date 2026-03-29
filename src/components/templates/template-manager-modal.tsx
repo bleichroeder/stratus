@@ -99,7 +99,7 @@ export function TemplateManagerModal({
                   {/* Context hint selector */}
                   {onContextHintChange && (
                     <div className="flex items-center gap-1.5 mt-1.5 ml-7">
-                      <Sparkles size={10} className="text-violet-400" />
+                      <Sparkles size={10} className="text-stone-400 dark:text-stone-500" />
                       <select
                         value={t.contextHint.type}
                         onChange={(e) => {

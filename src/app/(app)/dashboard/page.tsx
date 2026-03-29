@@ -125,7 +125,7 @@ export default function AppPage() {
   const [templatePickerMode, setTemplatePickerMode] = useState<"create" | "insert">("create");
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [templateParentId, setTemplateParentId] = useState<string | null>(null);
-  const editorRef = useRef<{ insertContent: (content: Json) => void } | null>(null);
+  const editorRef = useRef<{ insertContent: (content: Json) => void; setContent: (content: Json) => void } | null>(null);
 
   // AI state
   const { generate: aiGenerate, loading: aiLoading } = useAI();
@@ -235,17 +235,18 @@ export default function AppPage() {
     setVaultFolderId(vf?.id ?? null);
   }, [notes, setVaultFolderId]);
 
-  // Track whether we should preserve the AI fill banner across the next tab change
-  const preserveAiFillBanner = useRef(false);
+  // Track which tab the AI fill banner was set for, so
+  // repeated effect runs for the same tab don't clear it.
+  const aiFillBannerTabId = useRef<string | null>(null);
 
   // Load note content when active tab changes
   useEffect(() => {
     setSaveStatus("idle");
-    if (preserveAiFillBanner.current) {
-      preserveAiFillBanner.current = false;
-    } else {
+    // Only clear the banner when switching to a genuinely different tab
+    if (activeTabId !== aiFillBannerTabId.current) {
       setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
       setAiFillModalOpen(false);
+      aiFillBannerTabId.current = null;
     }
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     if (!activeTabId) {
@@ -426,13 +427,13 @@ export default function AppPage() {
         setNotes((prev) => [note, ...prev]);
         setTabs((prev) => [...prev, { id: note.id, title: note.title }]);
         setTemplateParentId(null);
-        // Show AI fill banner for templates — set flag before changing tab
-        // so the tab-change effect doesn't immediately clear it
+        // Show AI fill banner for templates — record the tab ID so the
+        // tab-change effect knows not to clear the banner for this tab.
         const hint = template.builtIn
           ? getBuiltinContextHint(template.id)
           : template.contextHint;
         if (template.builtIn || hint.type !== "none") {
-          preserveAiFillBanner.current = true;
+          aiFillBannerTabId.current = note.id;
           setAiFillBanner({ show: true, templateId: template.id, contextHint: hint });
         }
         setActiveTabId(note.id);
@@ -557,7 +558,7 @@ export default function AppPage() {
     }
     const nodes = plainTextToTiptapNodes(result.text);
     if (editorRef.current && nodes.length > 0) {
-      editorRef.current.insertContent({ type: "doc", content: nodes } as Json);
+      editorRef.current.setContent({ type: "doc", content: nodes } as Json);
     }
     setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE });
     setAiFillModalOpen(false);
@@ -1363,13 +1364,6 @@ export default function AppPage() {
           </div>
         ) : activeNote ? (
           <EditorErrorBoundary>
-          {aiFillBanner.show && aiFillBanner.templateId && (
-            <AIFillBanner
-              loading={aiLoading}
-              onFill={() => setAiFillModalOpen(true)}
-              onDismiss={() => setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE })}
-            />
-          )}
           <NoteEditor
             noteId={activeNote.id}
             content={activeNote.content}
@@ -1386,6 +1380,13 @@ export default function AppPage() {
             editorRef={editorRef}
             onSummarize={handleSummarize}
             aiLoading={aiLoading}
+            bannerSlot={aiFillBanner.show && aiFillBanner.templateId ? (
+              <AIFillBanner
+                loading={aiLoading}
+                onFill={() => setAiFillModalOpen(true)}
+                onDismiss={() => setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE })}
+              />
+            ) : undefined}
             isCollaborative={activeNoteCollaborators.length > 0 && !!process.env.NEXT_PUBLIC_PARTYKIT_HOST}
             collaboratorRole={
               activeNote.user_id === currentUserId
