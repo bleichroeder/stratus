@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { Note } from "@/lib/types";
 
 const STORAGE_KEY = "stratus-note-viewed";
+const INITIALIZED_KEY = "stratus-note-viewed-init";
 
 function loadViewedMap(): Record<string, string> {
   try {
@@ -39,6 +40,28 @@ export function useUnseenNotes(notes: Note[], activeNoteId: string | null) {
   const viewedRef = useRef<Record<string, string>>(loadViewedMap());
   const activeNoteIdRef = useRef(activeNoteId);
   activeNoteIdRef.current = activeNoteId;
+
+  // Seed the viewed map on first use — mark all existing notes as seen
+  // so only genuinely new/updated notes after this point show the dot.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || notes.length === 0) return;
+    if (localStorage.getItem(INITIALIZED_KEY)) {
+      seededRef.current = true;
+      return;
+    }
+    const viewed = viewedRef.current;
+    for (const note of notes) {
+      if (note.is_folder || note.is_template) continue;
+      if (!viewed[note.id]) {
+        viewed[note.id] = note.updated_at;
+      }
+    }
+    viewedRef.current = viewed;
+    saveViewedMap(viewed);
+    localStorage.setItem(INITIALIZED_KEY, "1");
+    seededRef.current = true;
+  }, [notes]);
 
   // Build parent lookup map
   const parentMap = useMemo(() => {
