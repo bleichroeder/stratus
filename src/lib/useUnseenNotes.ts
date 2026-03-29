@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { Note } from "@/lib/types";
 
 const STORAGE_KEY = "stratus-note-viewed";
@@ -18,12 +18,34 @@ function saveViewedMap(map: Record<string, string>) {
 }
 
 /**
+ * Collect ancestor folder IDs for a note by walking parent_id up the tree.
+ */
+function getAncestorIds(noteId: string, parentMap: Map<string, string | null>): string[] {
+  const ancestors: string[] = [];
+  let current = parentMap.get(noteId) ?? null;
+  while (current) {
+    ancestors.push(current);
+    current = parentMap.get(current) ?? null;
+  }
+  return ancestors;
+}
+
+/**
  * Tracks which notes have been updated since the user last viewed them.
- * Returns a Set of "unseen" note IDs and a markSeen function.
+ * Returns a Set of "unseen" note IDs (including ancestor folders) and a markSeen function.
  */
 export function useUnseenNotes(notes: Note[]) {
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set());
   const viewedRef = useRef<Record<string, string>>(loadViewedMap());
+
+  // Build parent lookup map
+  const parentMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const note of notes) {
+      map.set(note.id, note.parent_id);
+    }
+    return map;
+  }, [notes]);
 
   // Recompute unseen set whenever notes change
   useEffect(() => {
@@ -35,25 +57,40 @@ export function useUnseenNotes(notes: Note[]) {
       const lastViewed = viewed[note.id];
       if (!lastViewed || new Date(note.updated_at) > new Date(lastViewed)) {
         unseen.add(note.id);
+        // Bubble up to ancestor folders
+        for (const ancestorId of getAncestorIds(note.id, parentMap)) {
+          unseen.add(ancestorId);
+        }
       }
     }
 
     setUnseenIds(unseen);
-  }, [notes]);
+  }, [notes, parentMap]);
 
   // Mark a note as seen — update localStorage and remove from unseen set
   const markSeen = useCallback((noteId: string) => {
+    // Write to ref + localStorage immediately so the next recompute won't re-add it
     const viewed = viewedRef.current;
     viewed[noteId] = new Date().toISOString();
     viewedRef.current = viewed;
     saveViewedMap(viewed);
-    setUnseenIds((prev) => {
-      if (!prev.has(noteId)) return prev;
-      const next = new Set(prev);
-      next.delete(noteId);
-      return next;
+
+    // Recompute the full unseen set from scratch to correctly clear ancestor folders
+    setUnseenIds(() => {
+      const unseen = new Set<string>();
+      for (const note of notes) {
+        if (note.is_folder || note.is_template) continue;
+        const lastViewed = viewed[note.id];
+        if (!lastViewed || new Date(note.updated_at) > new Date(lastViewed)) {
+          unseen.add(note.id);
+          for (const ancestorId of getAncestorIds(note.id, parentMap)) {
+            unseen.add(ancestorId);
+          }
+        }
+      }
+      return unseen;
     });
-  }, []);
+  }, [notes, parentMap]);
 
   // Prune stale entries when notes change
   useEffect(() => {

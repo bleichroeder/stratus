@@ -267,7 +267,7 @@ function NoteTreeItem({
         ) : (
           <>
             <span className="truncate flex-1">{note.title}</span>
-            {!note.is_folder && unseenNoteIds.has(note.id) && (
+            {unseenNoteIds.has(note.id) && (
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
             )}
             {!note.is_folder && collaborativeNoteIds.has(note.id) && (
