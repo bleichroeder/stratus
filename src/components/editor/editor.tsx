@@ -324,6 +324,16 @@ export function NoteEditor({
     [editor, wikiSuggest]
   );
 
+  // Cancel any pending debounced save on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+        debounceTimer.current = null;
+      }
+    };
+  }, []);
+
   // When the noteId changes on non-collaborative notes, load new content
   useEffect(() => {
     if (isCollaborative) return; // Yjs handles content for collaborative notes

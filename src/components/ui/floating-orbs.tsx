@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Subtle floating abstract orbs background.
+ * Subtle floating cloud-like orbs background.
  * Uses CSS animations only — no JS animation loop.
  */
 export function FloatingOrbs() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden z-0" aria-hidden="true">
       <div
-        className="absolute rounded-full blur-3xl opacity-[0.18] dark:opacity-[0.12] bg-stone-400 dark:bg-stone-400"
+        className="absolute rounded-full blur-3xl opacity-[0.25] dark:opacity-[0.12] bg-black dark:bg-white"
         style={{
           width: "40vw",
           height: "40vw",
@@ -20,7 +20,7 @@ export function FloatingOrbs() {
         }}
       />
       <div
-        className="absolute rounded-full blur-3xl opacity-[0.14] dark:opacity-[0.09] bg-stone-300 dark:bg-stone-500"
+        className="absolute rounded-full blur-3xl opacity-[0.20] dark:opacity-[0.09] bg-black dark:bg-white"
         style={{
           width: "35vw",
           height: "35vw",
@@ -32,7 +32,7 @@ export function FloatingOrbs() {
         }}
       />
       <div
-        className="absolute rounded-full blur-3xl opacity-[0.12] dark:opacity-[0.08] bg-stone-300 dark:bg-stone-400"
+        className="absolute rounded-full blur-3xl opacity-[0.18] dark:opacity-[0.08] bg-black dark:bg-white"
         style={{
           width: "30vw",
           height: "30vw",

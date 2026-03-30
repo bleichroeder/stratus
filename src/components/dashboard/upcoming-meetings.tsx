@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { fetchCalendarEvents } from "@/lib/calendar";
 import type { CalendarEvent } from "@/lib/types";
-import { Video, Users, FileText } from "lucide-react";
+import { FileText } from "lucide-react";
 
 interface UpcomingMeetingsProps {
   onPrepareMeetingNote: (event: CalendarEvent) => void;
@@ -37,46 +37,28 @@ function EventCard({ event, onPrepareMeetingNote, isPreparing }: {
   onPrepareMeetingNote: (event: CalendarEvent) => void;
   isPreparing: boolean;
 }) {
-  const attendeeCount = event.attendees.filter((a) => !a.self).length;
-
   return (
-    <div className="flex flex-col gap-1.5 px-3 py-2.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
-      <div className="flex items-center gap-3">
-        <p className="flex-1 text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
-          {event.title}
-        </p>
-        <button
-          onClick={() => onPrepareMeetingNote(event)}
-          disabled={isPreparing}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-50 shrink-0 transition-colors"
-        >
-          <FileText size={12} />
-          {isPreparing ? "Creating..." : "Prepare note"}
-        </button>
-      </div>
-      <div className="flex items-center gap-3 text-xs text-stone-400 dark:text-stone-500">
-        <span className="font-mono whitespace-nowrap">
+    <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900">
+      <span className="hidden sm:inline text-xs font-mono text-stone-400 dark:text-stone-500 shrink-0 w-[135px] tabular-nums">
+        {formatTimeRange(event.startTime, event.endTime)}
+      </span>
+      <div className="flex-1 min-w-0 sm:contents">
+        <span className="sm:hidden block text-[11px] font-mono text-stone-400 dark:text-stone-500">
           {formatTimeRange(event.startTime, event.endTime)}
         </span>
-        {attendeeCount > 0 && (
-          <span className="flex items-center gap-1">
-            <Users size={10} />
-            {attendeeCount}
-          </span>
-        )}
-        {event.meetingLink && (
-          <a
-            href={event.meetingLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-1 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-          >
-            <Video size={10} />
-            Join
-          </a>
-        )}
+        <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
+          {event.title}
+        </p>
       </div>
+      <button
+        onClick={() => onPrepareMeetingNote(event)}
+        disabled={isPreparing}
+        title="Prepare note"
+        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-50 shrink-0 transition-colors"
+      >
+        <FileText size={12} />
+        <span className="hidden sm:inline">{isPreparing ? "Creating..." : "Prepare note"}</span>
+      </button>
     </div>
   );
 }
@@ -137,13 +119,11 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
         </p>
       ) : (
         <div className="space-y-4">
-          {grouped.map((group) => (
-            <div key={group.label} className="space-y-2">
-              {grouped.length > 1 && (
-                <p className="text-xs font-medium text-stone-500 dark:text-stone-400">
-                  {group.label}
-                </p>
-              )}
+          {grouped.map((group, i) => (
+            <div key={group.label} className="space-y-1.5">
+              <p className={`text-xs font-semibold uppercase tracking-wider ${i > 0 ? "pt-2 border-t border-stone-200 dark:border-stone-800" : ""} ${group.label === "Today" ? "text-stone-900 dark:text-stone-100" : "text-stone-400 dark:text-stone-500"}`}>
+                {group.label}
+              </p>
               {group.events.slice(0, MAX_EVENTS_PER_DAY).map((event) => (
                 <EventCard
                   key={event.id}

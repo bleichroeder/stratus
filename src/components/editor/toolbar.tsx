@@ -1,6 +1,6 @@
 "use client";
 
-import type { Editor } from "@tiptap/react";
+import { type Editor, useEditorState } from "@tiptap/react";
 import {
   Bold,
   Italic,
@@ -61,11 +61,10 @@ function ToolbarButton({
   return (
     <button
       type="button"
-      onPointerDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
       title={title}
-      style={{ touchAction: "manipulation" }}
       className={`p-2.5 md:p-1.5 rounded-lg md:rounded hover:bg-stone-200 dark:hover:bg-stone-700 transition-colors shrink-0 ${
         active ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100" : "text-stone-600 dark:text-stone-400"
       } ${disabled ? "opacity-30 cursor-not-allowed" : ""}`}
@@ -83,6 +82,31 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkDefault, setLinkDefault] = useState("");
   const [imageModalOpen, setImageModalOpen] = useState(false);
+
+  const editorState = useEditorState({
+    editor,
+    selector: (ctx: { editor: Editor | null }) => {
+      if (!ctx.editor) return null;
+      return {
+        canUndo: ctx.editor.can().undo(),
+        canRedo: ctx.editor.can().redo(),
+        isBold: ctx.editor.isActive("bold"),
+        isItalic: ctx.editor.isActive("italic"),
+        isUnderline: ctx.editor.isActive("underline"),
+        isStrike: ctx.editor.isActive("strike"),
+        isCode: ctx.editor.isActive("code"),
+        isH1: ctx.editor.isActive("heading", { level: 1 }),
+        isH2: ctx.editor.isActive("heading", { level: 2 }),
+        isH3: ctx.editor.isActive("heading", { level: 3 }),
+        isBulletList: ctx.editor.isActive("bulletList"),
+        isOrderedList: ctx.editor.isActive("orderedList"),
+        isTaskList: ctx.editor.isActive("taskList"),
+        isBlockquote: ctx.editor.isActive("blockquote"),
+        isCodeBlock: ctx.editor.isActive("codeBlock"),
+        isLink: ctx.editor.isActive("link"),
+      };
+    },
+  });
 
   function openLinkModal() {
     if (!editor) return;
@@ -111,7 +135,7 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
   const isMobile = useIsMobile();
 
-  if (!editor) return null;
+  if (!editor || !editorState) return null;
 
   const iconSize = isMobile ? 18 : 16;
 
@@ -120,14 +144,14 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
       <div className={`flex items-center gap-0.5 px-2 py-1.5 md:px-3 md:py-1.5 bg-white dark:bg-stone-950 sticky top-0 z-10 overflow-x-auto md:flex-wrap border-b border-stone-200 dark:border-stone-800 toolbar-scroll${disabled ? " opacity-50 pointer-events-none" : ""}`}>
         <ToolbarButton
           onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
+          disabled={!editorState.canUndo}
           title="Undo"
         >
           <Undo size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
+          disabled={!editorState.canRedo}
           title="Redo"
         >
           <Redo size={iconSize} />
@@ -137,21 +161,21 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          active={editor.isActive("heading", { level: 1 })}
+          active={editorState.isH1}
           title="Heading 1"
         >
           <Heading1 size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          active={editor.isActive("heading", { level: 2 })}
+          active={editorState.isH2}
           title="Heading 2"
         >
           <Heading2 size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          active={editor.isActive("heading", { level: 3 })}
+          active={editorState.isH3}
           title="Heading 3"
         >
           <Heading3 size={iconSize} />
@@ -161,35 +185,35 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBold().run()}
-          active={editor.isActive("bold")}
+          active={editorState.isBold}
           title="Bold"
         >
           <Bold size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          active={editor.isActive("italic")}
+          active={editorState.isItalic}
           title="Italic"
         >
           <Italic size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleUnderline().run()}
-          active={editor.isActive("underline")}
+          active={editorState.isUnderline}
           title="Underline"
         >
           <Underline size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleStrike().run()}
-          active={editor.isActive("strike")}
+          active={editorState.isStrike}
           title="Strikethrough"
         >
           <Strikethrough size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCode().run()}
-          active={editor.isActive("code")}
+          active={editorState.isCode}
           title="Inline code"
         >
           <Code size={iconSize} />
@@ -199,21 +223,21 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          active={editor.isActive("bulletList")}
+          active={editorState.isBulletList}
           title="Bullet list"
         >
           <List size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          active={editor.isActive("orderedList")}
+          active={editorState.isOrderedList}
           title="Ordered list"
         >
           <ListOrdered size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleTaskList().run()}
-          active={editor.isActive("taskList")}
+          active={editorState.isTaskList}
           title="Task list"
         >
           <ListTodo size={iconSize} />
@@ -223,14 +247,14 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
-          active={editor.isActive("blockquote")}
+          active={editorState.isBlockquote}
           title="Blockquote"
         >
           <Quote size={iconSize} />
         </ToolbarButton>
         <ToolbarButton
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-          active={editor.isActive("codeBlock")}
+          active={editorState.isCodeBlock}
           title="Code block"
         >
           <CodeSquare size={iconSize} />
@@ -246,7 +270,7 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
         <ToolbarButton
           onClick={openLinkModal}
-          active={editor.isActive("link")}
+          active={editorState.isLink}
           title="Link"
         >
           <LinkIcon size={iconSize} />

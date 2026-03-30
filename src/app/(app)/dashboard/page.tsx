@@ -54,7 +54,6 @@ import { useAI } from "@/lib/useAI";
 import { tiptapToPlainText, plainTextToTiptapNodes, type ContextNoteInput } from "@/lib/ai";
 import { AIFillBanner } from "@/components/ai/ai-fill-banner";
 import { AIFillModal, type ContextNote } from "@/components/ai/ai-fill-modal";
-import { FloatingOrbs } from "@/components/ui/floating-orbs";
 
 function todayString(): string {
   return new Date().toLocaleDateString("en-US", {
@@ -241,6 +240,7 @@ export default function AppPage() {
 
   // Load note content when active tab changes
   useEffect(() => {
+    let stale = false;
     setSaveStatus("idle");
     // Only clear the banner when switching to a genuinely different tab
     if (activeTabId !== aiFillBannerTabId.current) {
@@ -257,15 +257,17 @@ export default function AppPage() {
     setNoteLoading(true);
     setActiveNote(null);
     getNote(activeTabId).then(async (note) => {
+      if (stale) return;
       if (!note) { setActiveNote(null); setNoteLoading(false); return; }
       // Decrypt if encrypted and vault is unlocked
       if (note.encrypted && vaultKey && isEncryptedPayload(note.content)) {
         try {
           const plaintext = await decryptContent(note.content, vaultKey);
+          if (stale) return;
           setActiveNote({ ...note, content: JSON.parse(plaintext) });
         } catch {
           console.error("Failed to decrypt note");
-          setActiveNote(null);
+          if (!stale) setActiveNote(null);
         }
       } else if (note.encrypted && !vaultKey) {
         // Vault locked — can't open
@@ -273,8 +275,9 @@ export default function AppPage() {
       } else {
         setActiveNote(note);
       }
-      setNoteLoading(false);
+      if (!stale) setNoteLoading(false);
     });
+    return () => { stale = true; };
   }, [activeTabId, vaultKey]);
 
   // Reset collaborators immediately when tab changes, then load new ones
@@ -331,15 +334,15 @@ export default function AppPage() {
   }
 
   function closeTab(id: string) {
-    setTabs((prev) => {
-      const next = prev.filter((t) => t.id !== id);
-      if (activeTabId === id) {
-        const idx = prev.findIndex((t) => t.id === id);
-        const newActive = next[Math.min(idx, next.length - 1)] ?? null;
-        setActiveTabId(newActive?.id ?? null);
-      }
-      return next;
-    });
+    const prev = tabs;
+    const next = prev.filter((t) => t.id !== id);
+    setTabs(next);
+    if (activeTabId === id) {
+      const idx = prev.findIndex((t) => t.id === id);
+      const newActive = next[Math.min(idx, next.length - 1)] ?? null;
+      setActiveTabId(newActive?.id ?? null);
+      if (!newActive) setActiveNote(null);
+    }
   }
 
   function closeOtherTabs(id: string) {
@@ -367,7 +370,7 @@ export default function AppPage() {
         }
         const updated = await updateNote(activeTabId, { content: contentToSave });
         // Keep decrypted content in local state
-        setActiveNote(note?.encrypted ? { ...updated, content } : updated);
+        setActiveNote((prev) => prev?.id === updated.id ? (note?.encrypted ? { ...updated, content } : updated) : prev);
         setNotes((prev) =>
           prev.map((n) => (n.id === updated.id ? updated : n))
         );
@@ -1281,9 +1284,8 @@ export default function AppPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center w-full relative bg-white dark:bg-stone-950 overflow-hidden">
-        <FloatingOrbs />
-        <div className="relative z-10 flex flex-col items-center gap-3">
+      <div className="flex h-screen items-center justify-center w-full bg-white dark:bg-stone-950">
+        <div className="flex flex-col items-center gap-3">
           <LogoFull size={32} />
           <Loader2 size={16} className="animate-spin text-stone-300 dark:text-stone-600" />
         </div>
