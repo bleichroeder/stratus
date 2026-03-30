@@ -46,7 +46,7 @@ function EventCard({ event, onPrepareMeetingNote, isPreparing }: {
         <span className="sm:hidden block text-[11px] font-mono text-stone-400 dark:text-stone-500">
           {formatTimeRange(event.startTime, event.endTime)}
         </span>
-        <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
+        <p className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate sm:flex-1 sm:min-w-0">
           {event.title}
         </p>
       </div>
@@ -63,7 +63,7 @@ function EventCard({ event, onPrepareMeetingNote, isPreparing }: {
   );
 }
 
-const MAX_EVENTS_PER_DAY = 5;
+const MAX_EVENTS = 5;
 
 export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId }: UpcomingMeetingsProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -91,10 +91,11 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
     return () => { cancelled = true; };
   }, []);
 
-  // Group events by day label
+  // Take the first MAX_EVENTS events, then group by day label
   const grouped = useMemo(() => {
+    const capped = events.slice(0, MAX_EVENTS);
     const groups: { label: string; events: CalendarEvent[] }[] = [];
-    for (const event of events) {
+    for (const event of capped) {
       const label = getDayLabel(event.startTime);
       const existing = groups.find((g) => g.label === label);
       if (existing) {
@@ -124,7 +125,7 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
               <p className={`text-xs font-semibold uppercase tracking-wider ${i > 0 ? "pt-2 border-t border-stone-200 dark:border-stone-800" : ""} ${group.label === "Today" ? "text-stone-900 dark:text-stone-100" : "text-stone-400 dark:text-stone-500"}`}>
                 {group.label}
               </p>
-              {group.events.slice(0, MAX_EVENTS_PER_DAY).map((event) => (
+              {group.events.map((event) => (
                 <EventCard
                   key={event.id}
                   event={event}
@@ -132,11 +133,6 @@ export function UpcomingMeetings({ onPrepareMeetingNote, preparingNoteForEventId
                   isPreparing={preparingNoteForEventId === event.id}
                 />
               ))}
-              {group.events.length > MAX_EVENTS_PER_DAY && (
-                <p className="text-xs text-stone-400 dark:text-stone-500 pl-3">
-                  +{group.events.length - MAX_EVENTS_PER_DAY} more
-                </p>
-              )}
             </div>
           ))}
         </div>
