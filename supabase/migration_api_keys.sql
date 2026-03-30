@@ -20,4 +20,5 @@ alter table public.api_keys enable row level security;
 
 create policy "Users manage own keys"
   on public.api_keys for all
-  using (auth.uid() = user_id);
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

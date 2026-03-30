@@ -20,6 +20,9 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
+    // Clear any existing session first so switching accounts works cleanly
+    await supabase.auth.signOut();
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
