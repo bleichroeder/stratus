@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Modal } from "@/components/ui/modal";
-import { Sparkles, Search, X, Plus, Loader2, Lock, FileText } from "lucide-react";
+import { Sparkles, Search, X, Plus, Loader2, Lock, FileText, ChevronDown } from "lucide-react";
 import { searchNotes, type SearchResult } from "@/lib/notes";
 import type { ContextHint } from "@/lib/templates";
+import { BUILTIN_TEMPLATES } from "@/lib/templates";
 
 export interface ContextNote {
   id: string;
@@ -21,6 +22,7 @@ interface AIFillModalProps {
   onGenerate: (params: {
     contextNotes: ContextNote[];
     instructions?: string;
+    templateId?: string;
   }) => void;
   loading: boolean;
 }
@@ -41,6 +43,7 @@ export function AIFillModal({
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [instructions, setInstructions] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(templateId);
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,6 +55,7 @@ export function AIFillModal({
     setSearchQuery("");
     setSearchResults([]);
     setInstructions("");
+    setSelectedTemplateId(templateId);
 
     if (contextHint.type === "none") {
       setSuggestedNotes([]);
@@ -145,8 +149,9 @@ export function AIFillModal({
     onGenerate({
       contextNotes: selected,
       instructions: instructions.trim() || undefined,
+      templateId: selectedTemplateId,
     });
-  }, [suggestedNotes, manualNotes, selectedIds, instructions, onGenerate]);
+  }, [suggestedNotes, manualNotes, selectedIds, instructions, onGenerate, selectedTemplateId]);
 
   const selectedCount = selectedIds.size;
   const allNotes = [...suggestedNotes, ...manualNotes];
@@ -256,6 +261,27 @@ export function AIFillModal({
               All matching notes already added
             </p>
           )}
+        </div>
+
+        {/* Template style selector */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-stone-400 dark:text-stone-500 uppercase tracking-wider">
+            AI Style
+          </label>
+          <div className="relative">
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => setSelectedTemplateId(e.target.value)}
+              className="w-full appearance-none px-3 py-2 pr-8 text-sm rounded-md border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:border-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-500"
+            >
+              {BUILTIN_TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 dark:text-stone-500 pointer-events-none" />
+          </div>
         </div>
 
         {/* Additional instructions */}

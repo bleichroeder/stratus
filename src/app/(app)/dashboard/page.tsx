@@ -539,8 +539,9 @@ export default function AppPage() {
   const handleAIFill = useCallback(async (params: {
     contextNotes: ContextNote[];
     instructions?: string;
+    templateId?: string;
   }) => {
-    const templateId = aiFillBanner.templateId;
+    const templateId = params.templateId ?? aiFillBanner.templateId;
     if (!templateId) return;
 
     const contextNotes: ContextNoteInput[] = params.contextNotes.map((n) => ({
@@ -1218,6 +1219,11 @@ export default function AppPage() {
       });
       setNotes((prev) => [meetingNote, ...(createdFolder ? [meetingFolder!] : []), ...prev]);
       setTabs((prev) => [...prev, { id: meetingNote.id, title: meetingNote.title }]);
+
+      // Show AI fill banner for the new meeting note
+      aiFillBannerTabId.current = meetingNote.id;
+      setAiFillBanner({ show: true, templateId: "builtin-meeting-notes", contextHint: CONTEXT_HINT_NONE });
+
       setActiveTabId(meetingNote.id);
     } catch (err) {
       console.error("Failed to create meeting note:", err);
