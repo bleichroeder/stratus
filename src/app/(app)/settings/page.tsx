@@ -3,6 +3,8 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { ApiKeysSection } from "@/components/settings/api-keys";
+import { ImportSection } from "@/components/settings/import-section";
+import { ExportSection } from "@/components/settings/export-section";
 
 export default function SettingsPage() {
   return (
@@ -20,6 +22,8 @@ export default function SettingsPage() {
           </h1>
         </div>
         <ApiKeysSection />
+        <ImportSection />
+        <ExportSection />
       </div>
     </div>
   );

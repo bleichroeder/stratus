@@ -45,7 +45,7 @@ export function Welcome({ onCreateNote, onDailyNote }: WelcomeProps) {
               Daily note
             </button>
             <Link
-              href="/import"
+              href="/settings"
               className="flex items-center justify-center gap-2 flex-1 px-4 py-2.5 rounded-lg border border-stone-300 dark:border-stone-700 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
             >
               <Upload size={16} />

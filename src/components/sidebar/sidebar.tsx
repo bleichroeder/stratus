@@ -28,12 +28,12 @@ import {
   FileText as FileTextIcon,
   Shield,
   User,
-  Upload,
   LayoutTemplate,
   MoreVertical,
   FolderInput,
   X,
   Settings,
+  Share2,
 } from "lucide-react";
 import type { VaultStatus } from "@/components/vault/vault-context";
 import type { Note } from "@/lib/types";
@@ -58,6 +58,8 @@ interface SidebarProps {
   showArchive: boolean;
   onToggleArchive: () => void;
   archiveCount: number;
+  showGraph: boolean;
+  onToggleGraph: () => void;
   isMobile?: boolean;
   mobileMenuOpen?: boolean;
   onCloseMobileMenu?: () => void;
@@ -575,6 +577,8 @@ export function Sidebar({
   showArchive,
   onToggleArchive,
   archiveCount,
+  showGraph,
+  onToggleGraph,
   isMobile = false,
   mobileMenuOpen = false,
   onCloseMobileMenu,
@@ -899,14 +903,6 @@ export function Sidebar({
                   <p className="text-xs text-stone-400 dark:text-stone-500 truncate">{userEmail}</p>
                 )}
               </div>
-              <Link
-                href="/import"
-                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-                onClick={() => setUserMenuOpen(false)}
-              >
-                <Upload size={14} />
-                <span>Import notes</span>
-              </Link>
               <Link
                 href="/settings"
                 className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
@@ -1297,6 +1293,18 @@ export function Sidebar({
       {/* Footer */}
       <div className="border-t border-stone-200 dark:border-stone-800">
         <button
+          onClick={onToggleGraph}
+          className={`flex items-center gap-2 w-full px-4 py-2 text-sm transition-colors ${
+            showGraph
+              ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100"
+              : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+          }`}
+        >
+          <Share2 size={14} />
+          <span>Graph</span>
+        </button>
+        <div className="border-t border-stone-200 dark:border-stone-800 mx-3" />
+        <button
           onClick={onToggleArchive}
           className={`flex items-center gap-2 w-full px-4 py-2 text-sm transition-colors ${
             showArchive
@@ -1350,14 +1358,6 @@ export function Sidebar({
 
           {userMenuOpen && (
             <div className="absolute bottom-full left-0 right-0 mb-1 mx-2 rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-lg py-1 z-50">
-              <Link
-                href="/import"
-                className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-                onClick={() => setUserMenuOpen(false)}
-              >
-                <Upload size={14} />
-                <span>Import notes</span>
-              </Link>
               <Link
                 href="/settings"
                 className="flex items-center gap-2 w-full px-3 py-1.5 text-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
