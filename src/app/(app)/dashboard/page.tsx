@@ -1224,7 +1224,8 @@ export default function AppPage() {
         parent_id: meetingFolder.id,
         is_folder: false,
       });
-      setNotes((prev) => [meetingNote, ...(createdFolder ? [meetingFolder!] : []), ...prev]);
+      // Use freshNotes as the base to avoid duplicates from stale state
+      setNotes([meetingNote, ...(createdFolder ? [meetingFolder!] : []), ...freshNotes]);
       setTabs((prev) => [...prev, { id: meetingNote.id, title: meetingNote.title }]);
 
       // Show AI fill banner for the new meeting note
