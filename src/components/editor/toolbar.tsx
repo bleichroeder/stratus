@@ -135,9 +135,26 @@ export function EditorToolbar({ editor, onImageUpload, disabled = false, onSumma
 
   const isMobile = useIsMobile();
 
-  if (!editor || !editorState) return null;
-
   const iconSize = isMobile ? 18 : 16;
+
+  if (!editor || !editorState) {
+    return (
+      <>
+        <div className={`flex items-center gap-0.5 px-2 py-1.5 md:px-3 md:py-1.5 bg-white dark:bg-stone-950 sticky top-0 z-10 overflow-x-auto md:flex-wrap border-b border-stone-200 dark:border-stone-800 toolbar-scroll opacity-50 pointer-events-none`}>
+          <ToolbarButton onClick={() => {}} disabled title="Undo"><Undo size={iconSize} /></ToolbarButton>
+          <ToolbarButton onClick={() => {}} disabled title="Redo"><Redo size={iconSize} /></ToolbarButton>
+          <Separator />
+          <ToolbarButton onClick={() => {}} disabled title="Heading 1"><Heading1 size={iconSize} /></ToolbarButton>
+          <ToolbarButton onClick={() => {}} disabled title="Heading 2"><Heading2 size={iconSize} /></ToolbarButton>
+          <ToolbarButton onClick={() => {}} disabled title="Heading 3"><Heading3 size={iconSize} /></ToolbarButton>
+          <Separator />
+          <ToolbarButton onClick={() => {}} disabled title="Bold"><Bold size={iconSize} /></ToolbarButton>
+          <ToolbarButton onClick={() => {}} disabled title="Italic"><Italic size={iconSize} /></ToolbarButton>
+          <ToolbarButton onClick={() => {}} disabled title="Underline"><Underline size={iconSize} /></ToolbarButton>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

@@ -1010,7 +1010,11 @@ export default function AppPage() {
     }
   }, [notes]);
 
+  const preparingMeetingRef = useRef(false);
   const handlePrepareMeetingNote = useCallback(async (event: CalendarEvent) => {
+    // Guard against double-clicks / concurrent calls
+    if (preparingMeetingRef.current) return;
+    preparingMeetingRef.current = true;
     setPreparingNoteForEventId(event.id);
     try {
       const noteTitle = `${event.title} – ${new Date(event.startTime).toLocaleDateString("en-US", {
@@ -1019,15 +1023,18 @@ export default function AppPage() {
         year: "numeric",
       })}`;
 
+      // Fetch fresh notes to avoid stale state race conditions
+      const freshNotes = await getNotes();
+
       // Check if note already exists
-      const existing = notes.find((n) => n.title === noteTitle && !n.is_folder);
+      const existing = freshNotes.find((n) => n.title === noteTitle && !n.is_folder);
       if (existing) {
         openTab(existing.id);
         return;
       }
 
       // Find or create "Meeting Notes" folder
-      let meetingFolder = notes.find(
+      let meetingFolder = freshNotes.find(
         (n) => n.title === "Meeting Notes" && n.is_folder && n.parent_id === null
       );
       let createdFolder = false;
@@ -1047,7 +1054,7 @@ export default function AppPage() {
 
       if (event.recurringEventId) {
         // Find notes in Meeting Notes folder that have matching recurringEventId in their meetingMeta
-        const candidateNotes = notes.filter(
+        const candidateNotes = freshNotes.filter(
           (n) => !n.is_folder && n.parent_id === meetingFolder!.id && n.title.startsWith(event.title)
         );
 
@@ -1222,15 +1229,16 @@ export default function AppPage() {
 
       // Show AI fill banner for the new meeting note
       aiFillBannerTabId.current = meetingNote.id;
-      setAiFillBanner({ show: true, templateId: "builtin-meeting-notes", contextHint: CONTEXT_HINT_NONE });
+      setAiFillBanner({ show: true, templateId: "builtin-meeting-notes", contextHint: { type: "daily_recent", days: 3 } });
 
       setActiveTabId(meetingNote.id);
     } catch (err) {
       console.error("Failed to create meeting note:", err);
     } finally {
       setPreparingNoteForEventId(null);
+      preparingMeetingRef.current = false;
     }
-  }, [notes, openTab]);
+  }, [openTab]);
 
   const handleShare = useCallback(async (): Promise<string> => {
     if (!activeTabId) throw new Error("No active note");

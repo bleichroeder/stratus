@@ -425,7 +425,15 @@ export function NoteEditor({
         )}
       </div>
       {bannerSlot}
-      <div className="flex-1 overflow-y-auto relative">
+      <div
+        className="flex-1 overflow-y-auto relative flex flex-col"
+        onClick={(e) => {
+          // Click on empty space in the editor area → focus editor at end
+          if (editor && e.target === e.currentTarget) {
+            editor.chain().focus("end").run();
+          }
+        }}
+      >
         {/* Viewer badge */}
         {collaboratorRole === "viewer" && (
           <div className="sticky top-0 z-10 flex justify-center py-1">
@@ -434,7 +442,7 @@ export function NoteEditor({
             </span>
           </div>
         )}
-        <EditorContent editor={editor} />
+        <EditorContent editor={editor} className="flex-1 flex flex-col" />
         <Backlinks
           currentNoteId={noteId}
           notes={notes}
