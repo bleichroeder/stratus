@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/sidebar/sidebar";
 import { NoteEditor } from "@/components/editor/editor";
 import { TabBar, type Tab } from "@/components/editor/tabs";
 import { ArchivePanel } from "@/components/sidebar/archive-panel";
+import { GraphPanel } from "@/components/graph/graph-panel";
 import { PromptModal, ConfirmModal } from "@/components/ui/modal";
 import {
   getNotes,
@@ -88,6 +89,7 @@ export default function AppPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [archivedNotes, setArchivedNotes] = useState<Note[]>([]);
   const [showArchive, setShowArchive] = useState(false);
+  const [showGraph, setShowGraph] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
@@ -561,6 +563,36 @@ export default function AppPage() {
       return;
     }
     const nodes = plainTextToTiptapNodes(result.text);
+
+    // Append wiki links to context notes if any were used
+    if (params.contextNotes.length > 0) {
+      nodes.push(
+        { type: "horizontalRule" },
+        {
+          type: "heading",
+          attrs: { level: 3 },
+          content: [{ type: "text", text: "Context" }],
+        },
+        {
+          type: "bulletList",
+          content: params.contextNotes.map((n) => ({
+            type: "listItem",
+            content: [{
+              type: "paragraph",
+              content: [{
+                type: "text",
+                text: n.title,
+                marks: [{
+                  type: "wikiLink",
+                  attrs: { noteId: n.id, title: n.title },
+                }],
+              }],
+            }],
+          })),
+        } as Json,
+      );
+    }
+
     if (editorRef.current && nodes.length > 0) {
       editorRef.current.setContent({ type: "doc", content: nodes } as Json);
     }
@@ -1325,6 +1357,8 @@ export default function AppPage() {
         showArchive={showArchive}
         onToggleArchive={() => setShowArchive((v) => !v)}
         archiveCount={archivedNotes.length}
+        showGraph={showGraph}
+        onToggleGraph={() => setShowGraph((v) => !v)}
         isMobile={isMobile}
         mobileMenuOpen={mobileMenuOpen}
         onCloseMobileMenu={() => setMobileMenuOpen(false)}
@@ -1349,107 +1383,113 @@ export default function AppPage() {
             onClose={() => setShowArchive(false)}
           />
         )}
-        {isMobile && (
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950">
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="p-1.5 rounded-md hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400"
-            >
-              <Menu size={18} />
-            </button>
-            {activeNote ? (
-              <span className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
-                {activeNote.title}
-              </span>
-            ) : (
-              <LogoFull size={18} />
-            )}
-          </div>
-        )}
-        <TabBar
-          tabs={tabs}
-          activeTabId={activeTabId}
-          onSelectTab={setActiveTabId}
-          onCloseTab={closeTab}
-          onCloseOthers={closeOtherTabs}
-          onCloseAll={closeAllTabs}
-          onRenameNote={handleRenameNote}
-        />
-        {noteLoading || (activeNote && !collabLoaded) ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Loader2 size={20} className="animate-spin text-stone-300 dark:text-stone-700" />
-          </div>
-        ) : activeNote ? (
-          <EditorErrorBoundary>
-          <NoteEditor
-            noteId={activeNote.id}
-            content={activeNote.content}
-            onUpdate={handleUpdateContent}
-            onImageUpload={handleImageUpload}
-            notes={notes}
-            onSelectNote={openTab}
-            sharedToken={activeNote.shared_token}
-            sharedAt={activeNote.shared_at}
-            isEncrypted={activeNote.encrypted}
-            onShare={handleShare}
-            onUnshare={handleUnshare}
-            saveStatus={saveStatus}
-            editorRef={editorRef}
-            onSummarize={handleSummarize}
-            aiLoading={aiLoading}
-            bannerSlot={aiFillBanner.show && aiFillBanner.templateId ? (
-              <AIFillBanner
-                loading={aiLoading}
-                onFill={() => setAiFillModalOpen(true)}
-                onDismiss={() => setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE })}
-              />
-            ) : undefined}
-            isCollaborative={activeNoteCollaborators.length > 0 && !!process.env.NEXT_PUBLIC_PARTYKIT_HOST}
-            collaboratorRole={
-              activeNote.user_id === currentUserId
-                ? "owner"
-                : activeNoteCollaborators.find((c) => c.user_id === currentUserId)?.role ?? null
-            }
-            currentUserId={currentUserId ?? undefined}
-            currentUserEmail={currentUserEmail ?? undefined}
-            currentUserDisplayName={userName ?? undefined}
-            isOwner={activeNote.user_id === currentUserId}
-            isInsideVault={isInsideVault(activeNote.id, notes)}
-            collaborators={activeNoteCollaborators}
-            onCollaboratorsChange={(collabs) => {
-              setActiveNoteCollaborators(collabs);
-              setCollaborativeNoteIds((prev) => {
-                const next = new Set(prev);
-                if (collabs.length > 0) next.add(activeNote.id);
-                else next.delete(activeNote.id);
-                return next;
-              });
-            }}
-          />
-          </EditorErrorBoundary>
-        ) : notes.length === 0 ? (
-          <Welcome
-            onCreateNote={() => handleCreateNote()}
-            onDailyNote={handleDailyNote}
-          />
+        {showGraph ? (
+          <GraphPanel notes={notes} onSelectNote={openTab} onClose={() => setShowGraph(false)} />
         ) : (
-          <Dashboard
-            notes={notes}
-            onSelectNote={openTab}
-            onCreateNote={() => handleCreateNote()}
-            onDailyNote={handleDailyNote}
-            onNewFromTemplate={() => openTemplatePicker("create")}
-            creatingNote={creatingNote}
-            creatingDailyNote={creatingDailyNote}
-            vaultStatus={vaultStatus}
-            onVaultUnlock={handleVaultClick}
-            userName={userName}
-            isGoogleUser={hasGoogle}
-            onPrepareMeetingNote={handlePrepareMeetingNote}
-            preparingNoteForEventId={preparingNoteForEventId}
-            collaborativeNoteIds={collaborativeNoteIds}
-            sharedWithMeNotes={sharedWithMeNotes}
-          />
+          <>
+            {isMobile && (
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-950">
+                <button
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="p-1.5 rounded-md hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400"
+                >
+                  <Menu size={18} />
+                </button>
+                {activeNote ? (
+                  <span className="text-sm font-medium text-stone-900 dark:text-stone-100 truncate">
+                    {activeNote.title}
+                  </span>
+                ) : (
+                  <LogoFull size={18} />
+                )}
+              </div>
+            )}
+            <TabBar
+              tabs={tabs}
+              activeTabId={activeTabId}
+              onSelectTab={setActiveTabId}
+              onCloseTab={closeTab}
+              onCloseOthers={closeOtherTabs}
+              onCloseAll={closeAllTabs}
+              onRenameNote={handleRenameNote}
+            />
+            {noteLoading || (activeNote && !collabLoaded) ? (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 size={20} className="animate-spin text-stone-300 dark:text-stone-700" />
+              </div>
+            ) : activeNote ? (
+              <EditorErrorBoundary>
+              <NoteEditor
+                noteId={activeNote.id}
+                content={activeNote.content}
+                onUpdate={handleUpdateContent}
+                onImageUpload={handleImageUpload}
+                notes={notes}
+                onSelectNote={openTab}
+                sharedToken={activeNote.shared_token}
+                sharedAt={activeNote.shared_at}
+                isEncrypted={activeNote.encrypted}
+                onShare={handleShare}
+                onUnshare={handleUnshare}
+                saveStatus={saveStatus}
+                editorRef={editorRef}
+                onSummarize={handleSummarize}
+                aiLoading={aiLoading}
+                bannerSlot={aiFillBanner.show && aiFillBanner.templateId ? (
+                  <AIFillBanner
+                    loading={aiLoading}
+                    onFill={() => setAiFillModalOpen(true)}
+                    onDismiss={() => setAiFillBanner({ show: false, templateId: null, contextHint: CONTEXT_HINT_NONE })}
+                  />
+                ) : undefined}
+                isCollaborative={activeNoteCollaborators.length > 0 && !!process.env.NEXT_PUBLIC_PARTYKIT_HOST}
+                collaboratorRole={
+                  activeNote.user_id === currentUserId
+                    ? "owner"
+                    : activeNoteCollaborators.find((c) => c.user_id === currentUserId)?.role ?? null
+                }
+                currentUserId={currentUserId ?? undefined}
+                currentUserEmail={currentUserEmail ?? undefined}
+                currentUserDisplayName={userName ?? undefined}
+                isOwner={activeNote.user_id === currentUserId}
+                isInsideVault={isInsideVault(activeNote.id, notes)}
+                collaborators={activeNoteCollaborators}
+                onCollaboratorsChange={(collabs) => {
+                  setActiveNoteCollaborators(collabs);
+                  setCollaborativeNoteIds((prev) => {
+                    const next = new Set(prev);
+                    if (collabs.length > 0) next.add(activeNote.id);
+                    else next.delete(activeNote.id);
+                    return next;
+                  });
+                }}
+              />
+              </EditorErrorBoundary>
+            ) : notes.length === 0 ? (
+              <Welcome
+                onCreateNote={() => handleCreateNote()}
+                onDailyNote={handleDailyNote}
+              />
+            ) : (
+              <Dashboard
+                notes={notes}
+                onSelectNote={openTab}
+                onCreateNote={() => handleCreateNote()}
+                onDailyNote={handleDailyNote}
+                onNewFromTemplate={() => openTemplatePicker("create")}
+                creatingNote={creatingNote}
+                creatingDailyNote={creatingDailyNote}
+                vaultStatus={vaultStatus}
+                onVaultUnlock={handleVaultClick}
+                userName={userName}
+                isGoogleUser={hasGoogle}
+                onPrepareMeetingNote={handlePrepareMeetingNote}
+                preparingNoteForEventId={preparingNoteForEventId}
+                collaborativeNoteIds={collaborativeNoteIds}
+                sharedWithMeNotes={sharedWithMeNotes}
+              />
+            )}
+          </>
         )}
       </main>
 
