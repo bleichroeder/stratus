@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "stratus": {
+      "url": "http://localhost:3000/api/mcp",
+      "headers": {
+        "Authorization": "Bearer sk_stratus_deb33ad6b232935636bdff6425507d643cc46b5f11bae6493210952db5ae5dca"
+      }
+    }
+  }
+}

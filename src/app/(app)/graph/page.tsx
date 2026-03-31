@@ -17,7 +17,13 @@ export default function GraphPage() {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] });
   const [searchQuery, setSearchQuery] = useState("");
   const [showOrphans, setShowOrphans] = useState(true);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [focusDepth, setFocusDepth] = useState(1);
   const graphRef = useRef<GraphViewHandle>(null);
+
+  const focusNodeTitle = focusNodeId
+    ? graphData.nodes.find((n) => n.id === focusNodeId)?.title ?? null
+    : null;
 
   // Auth check + load notes
   useEffect(() => {
@@ -63,6 +69,9 @@ export default function GraphPage() {
           onSelectNote={handleSelectNote}
           searchQuery={searchQuery}
           showOrphans={showOrphans}
+          focusNodeId={focusNodeId}
+          focusDepth={focusDepth}
+          onFocusNode={setFocusNodeId}
         />
 
         <GraphControls
@@ -75,6 +84,10 @@ export default function GraphPage() {
           onZoomOut={() => graphRef.current?.zoomOut()}
           onResetView={() => graphRef.current?.resetView()}
           showBackButton
+          focusNodeTitle={focusNodeTitle}
+          focusDepth={focusDepth}
+          onFocusDepthChange={setFocusDepth}
+          onExitFocus={() => setFocusNodeId(null)}
         />
       </div>
 

@@ -4,7 +4,7 @@ import { useState, useRef, useMemo } from "react";
 import { buildGraphData } from "@/lib/graph";
 import { GraphView, type GraphViewHandle } from "@/components/graph/graph-view";
 import { GraphControls } from "@/components/graph/graph-controls";
-import { FloatingOrbs } from "@/components/ui/floating-orbs";
+
 import type { Note } from "@/lib/types";
 
 interface GraphPanelProps {
@@ -16,8 +16,14 @@ interface GraphPanelProps {
 export function GraphPanel({ notes, onSelectNote, onClose }: GraphPanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [showOrphans, setShowOrphans] = useState(true);
+  const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
+  const [focusDepth, setFocusDepth] = useState(1);
   const graphRef = useRef<GraphViewHandle>(null);
   const graphData = useMemo(() => buildGraphData(notes), [notes]);
+
+  const focusNodeTitle = focusNodeId
+    ? graphData.nodes.find((n) => n.id === focusNodeId)?.title ?? null
+    : null;
 
   const handleSelectNote = (id: string) => {
     onClose();
@@ -26,15 +32,16 @@ export function GraphPanel({ notes, onSelectNote, onClose }: GraphPanelProps) {
 
   return (
     <div className="flex-1 relative overflow-hidden">
-      <FloatingOrbs />
-
-      <div className="absolute inset-0 z-[1]">
+      <div className="absolute inset-0">
         <GraphView
           ref={graphRef}
           data={graphData}
           onSelectNote={handleSelectNote}
           searchQuery={searchQuery}
           showOrphans={showOrphans}
+          focusNodeId={focusNodeId}
+          focusDepth={focusDepth}
+          onFocusNode={setFocusNodeId}
         />
 
         <GraphControls
@@ -47,6 +54,10 @@ export function GraphPanel({ notes, onSelectNote, onClose }: GraphPanelProps) {
           onZoomOut={() => graphRef.current?.zoomOut()}
           onResetView={() => graphRef.current?.resetView()}
           onClose={onClose}
+          focusNodeTitle={focusNodeTitle}
+          focusDepth={focusDepth}
+          onFocusDepthChange={setFocusDepth}
+          onExitFocus={() => setFocusNodeId(null)}
         />
       </div>
 

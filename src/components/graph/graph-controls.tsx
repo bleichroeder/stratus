@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, ZoomIn, ZoomOut, Eye, EyeOff, Maximize, ArrowLeft, X } from "lucide-react";
+import { Search, ZoomIn, ZoomOut, Eye, EyeOff, Maximize, ArrowLeft, X, Focus } from "lucide-react";
 import Link from "next/link";
 import type { GraphData } from "@/lib/graph";
 
@@ -15,6 +15,10 @@ interface GraphControlsProps {
   onResetView: () => void;
   showBackButton?: boolean;
   onClose?: () => void;
+  focusNodeTitle: string | null;
+  focusDepth: number;
+  onFocusDepthChange: (depth: number) => void;
+  onExitFocus: () => void;
 }
 
 export function GraphControls({
@@ -28,12 +32,16 @@ export function GraphControls({
   onResetView,
   showBackButton = false,
   onClose,
+  focusNodeTitle,
+  focusDepth,
+  onFocusDepthChange,
+  onExitFocus,
 }: GraphControlsProps) {
   const connectedCount = new Set(data.edges.flatMap((e) => [e.source, e.target])).size;
 
   return (
     <div className="absolute top-4 left-4 right-4 flex items-start justify-between pointer-events-none z-10">
-      {/* Left column: back + search + stats */}
+      {/* Left column: back + search + stats + focus */}
       <div className="pointer-events-auto flex flex-col gap-2">
         <div className="flex items-center gap-2">
           {showBackButton && (
@@ -62,6 +70,43 @@ export function GraphControls({
         <div className="px-3 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm text-xs text-stone-400 dark:text-stone-500">
           {data.nodes.length} notes &middot; {data.edges.length} links &middot; {connectedCount} connected
         </div>
+
+        {/* Focus mode banner */}
+        {focusNodeTitle && (
+          <div className="flex items-center gap-3 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800/50 bg-blue-50/80 dark:bg-blue-950/40 backdrop-blur-sm shadow-sm w-56">
+            <Focus size={14} className="text-blue-500 dark:text-blue-400 shrink-0" />
+            <div className="flex flex-col gap-1.5 min-w-0 flex-1">
+              <span className="text-sm font-medium text-blue-900 dark:text-blue-100 truncate">
+                {focusNodeTitle}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-blue-600 dark:text-blue-400 whitespace-nowrap">Depth</span>
+                <div className="flex gap-0.5">
+                  {[1, 2, 3].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => onFocusDepthChange(d)}
+                      className={`px-1.5 py-0.5 text-xs rounded transition-colors ${
+                        focusDepth === d
+                          ? "bg-blue-500 text-white"
+                          : "text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+                      }`}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={onExitFocus}
+              className="p-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-500 dark:text-blue-400 transition-colors shrink-0"
+              title="Exit focus mode"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Right column: zoom + toggle controls */}

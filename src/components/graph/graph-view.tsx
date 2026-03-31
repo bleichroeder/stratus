@@ -25,6 +25,9 @@ interface GraphViewProps {
   onSelectNote: (id: string) => void;
   searchQuery: string;
   showOrphans: boolean;
+  focusNodeId: string | null;
+  focusDepth: number;
+  onFocusNode: (id: string | null) => void;
 }
 
 type SimNode = GraphNode & SimulationNodeDatum;
@@ -34,8 +37,40 @@ function getNodeRadius(n: { linkCount: number }): number {
   return Math.min(4 + n.linkCount * 2, 14);
 }
 
+/**
+ * Compute the set of node IDs within `depth` hops of `rootId`.
+ */
+function getNeighborhood(
+  rootId: string,
+  links: SimLink[],
+  depth: number
+): Set<string> {
+  const neighbors = new Set<string>([rootId]);
+  let frontier = new Set<string>([rootId]);
+
+  for (let d = 0; d < depth; d++) {
+    const nextFrontier = new Set<string>();
+    for (const l of links) {
+      const sId = typeof l.source === "object" ? (l.source as SimNode).id : l.source;
+      const tId = typeof l.target === "object" ? (l.target as SimNode).id : l.target;
+      if (frontier.has(sId) && !neighbors.has(tId)) {
+        nextFrontier.add(tId);
+        neighbors.add(tId);
+      }
+      if (frontier.has(tId) && !neighbors.has(sId)) {
+        nextFrontier.add(sId);
+        neighbors.add(sId);
+      }
+    }
+    frontier = nextFrontier;
+    if (frontier.size === 0) break;
+  }
+
+  return neighbors;
+}
+
 export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function GraphView(
-  { data, onSelectNote, searchQuery, showOrphans },
+  { data, onSelectNote, searchQuery, showOrphans, focusNodeId, focusDepth, onFocusNode },
   ref
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -51,13 +86,20 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
   const animFrameRef = useRef<number>(0);
   const searchQueryRef = useRef(searchQuery);
   const onSelectNoteRef = useRef(onSelectNote);
+  const focusNodeIdRef = useRef(focusNodeId);
+  const focusDepthRef = useRef(focusDepth);
+  const onFocusNodeRef = useRef(onFocusNode);
   const [hovered, setHovered] = useState<GraphNode | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const isDarkRef = useRef(false);
+  const lastClickTimeRef = useRef(0);
 
   // Keep refs in sync with props
   searchQueryRef.current = searchQuery;
   onSelectNoteRef.current = onSelectNote;
+  focusNodeIdRef.current = focusNodeId;
+  focusDepthRef.current = focusDepth;
+  onFocusNodeRef.current = onFocusNode;
 
   // Check dark mode
   useEffect(() => {
@@ -129,6 +171,13 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
     const links = linksRef.current;
     const hNode = hoveredRef.current;
     const query = searchQueryRef.current.toLowerCase();
+    const fNodeId = focusNodeIdRef.current;
+    const fDepth = focusDepthRef.current;
+
+    // Focus mode neighborhood
+    const focusNeighbors = fNodeId
+      ? getNeighborhood(fNodeId, links, fDepth)
+      : null;
 
     // Search matches
     const matchIds = new Set<string>();
@@ -158,6 +207,7 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
 
       const isHighlighted = hNode && connectedIds.has(s.id) && connectedIds.has(tgt.id);
       const isSearchDimmed = query && !matchIds.has(s.id) && !matchIds.has(tgt.id);
+      const isFocusDimmed = focusNeighbors && (!focusNeighbors.has(s.id) || !focusNeighbors.has(tgt.id));
 
       const dx = tgt.x - s.x;
       const dy = tgt.y - s.y;
@@ -168,12 +218,20 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
       ctx.moveTo(s.x, s.y);
       ctx.quadraticCurveTo(cx, cy, tgt.x, tgt.y);
 
-      if (isSearchDimmed) {
+      const isInFocusNeighborhood = focusNeighbors && focusNeighbors.has(s.id) && focusNeighbors.has(tgt.id);
+
+      if (isFocusDimmed) {
+        ctx.strokeStyle = dark ? "rgba(120,113,108,0.03)" : "rgba(168,162,158,0.04)";
+        ctx.lineWidth = 0.3;
+      } else if (isSearchDimmed) {
         ctx.strokeStyle = dark ? "rgba(120,113,108,0.06)" : "rgba(168,162,158,0.08)";
         ctx.lineWidth = 0.5;
       } else if (isHighlighted) {
         ctx.strokeStyle = dark ? "rgba(168,162,158,0.5)" : "rgba(120,113,108,0.5)";
         ctx.lineWidth = 1.5;
+      } else if (isInFocusNeighborhood) {
+        ctx.strokeStyle = dark ? "rgba(168,162,158,0.35)" : "rgba(120,113,108,0.35)";
+        ctx.lineWidth = 1.2;
       } else {
         ctx.strokeStyle = dark ? "rgba(168,162,158,0.12)" : "rgba(120,113,108,0.15)";
         ctx.lineWidth = 0.8;
@@ -181,58 +239,114 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
       ctx.stroke();
     }
 
-    // Nodes
+    // Nodes — each drawn as a cloud (cluster of soft overlapping circles)
     for (const n of nodes) {
       if (n.x == null || n.y == null) continue;
       const r = getNodeRadius(n);
       const isHovered = hNode?.id === n.id;
       const isConnected = hNode && connectedIds.has(n.id);
       const isMatch = query && matchIds.has(n.id);
-      const isDimmed = (query && !matchIds.has(n.id)) || (hNode && !connectedIds.has(n.id));
+      const isFocusRoot = fNodeId === n.id;
+      const isInFocus = focusNeighbors ? focusNeighbors.has(n.id) : false;
+      const isFocusDimmed = focusNeighbors && !isInFocus;
+      const isHoverDimmed = !focusNeighbors && hNode && !connectedIds.has(n.id);
+      const isDimmed = isFocusDimmed || (query && !matchIds.has(n.id)) || isHoverDimmed;
 
-      // Outer glow (cloud halo)
-      if (!isDimmed) {
-        const glowR = r * (isHovered ? 5 : isConnected ? 3.5 : 2.5);
-        const grad = ctx.createRadialGradient(n.x, n.y, r * 0.5, n.x, n.y, glowR);
-        if (isMatch) {
-          grad.addColorStop(0, dark ? "rgba(96,165,250,0.25)" : "rgba(37,99,235,0.18)");
-          grad.addColorStop(1, "transparent");
-        } else if (isHovered) {
-          grad.addColorStop(0, dark ? "rgba(214,211,209,0.3)" : "rgba(28,25,23,0.15)");
-          grad.addColorStop(1, "transparent");
-        } else {
-          grad.addColorStop(0, dark ? "rgba(168,162,158,0.1)" : "rgba(120,113,108,0.08)");
-          grad.addColorStop(1, "transparent");
-        }
+      // Cloud lobe layout — offsets relative to node center, scaled by radius
+      // Each lobe: [dx, dy, radiusMultiplier]
+      const lobes: [number, number, number][] = [
+        [0, 0, 1.0],         // center
+        [-0.7, -0.3, 0.8],   // left
+        [0.7, -0.2, 0.75],   // right
+        [0, -0.6, 0.7],      // top
+        [-0.35, 0.3, 0.6],   // bottom-left
+        [0.4, 0.35, 0.55],   // bottom-right
+      ];
+
+      // Pick colour + alpha based on state
+      let baseR: number, baseG: number, baseB: number;
+      let coreAlpha: number;
+      let glowAlpha: number;
+
+      if (isDimmed) {
+        if (dark) { baseR = 87; baseG = 83; baseB = 78; }
+        else { baseR = 214; baseG = 211; baseB = 209; }
+        coreAlpha = isFocusDimmed ? (dark ? 0.06 : 0.1) : (dark ? 0.12 : 0.18);
+        glowAlpha = isFocusDimmed ? (dark ? 0.02 : 0.03) : (dark ? 0.04 : 0.06);
+      } else if (isFocusRoot) {
+        // Focused node — prominent accent colour
+        if (dark) { baseR = 96; baseG = 165; baseB = 250; }
+        else { baseR = 37; baseG = 99; baseB = 235; }
+        coreAlpha = dark ? 0.75 : 0.7;
+        glowAlpha = dark ? 0.18 : 0.14;
+      } else if (isMatch) {
+        if (dark) { baseR = 96; baseG = 165; baseB = 250; }
+        else { baseR = 37; baseG = 99; baseB = 235; }
+        coreAlpha = dark ? 0.7 : 0.65;
+        glowAlpha = dark ? 0.15 : 0.12;
+      } else if (isHovered) {
+        if (dark) { baseR = 231; baseG = 229; baseB = 228; }
+        else { baseR = 28; baseG = 25; baseB = 23; }
+        coreAlpha = dark ? 0.7 : 0.6;
+        glowAlpha = dark ? 0.18 : 0.1;
+      } else if (isConnected) {
+        if (dark) { baseR = 168; baseG = 162; baseB = 158; }
+        else { baseR = 120; baseG = 113; baseB = 108; }
+        coreAlpha = dark ? 0.55 : 0.45;
+        glowAlpha = dark ? 0.12 : 0.08;
+      } else {
+        if (dark) { baseR = 168; baseG = 162; baseB = 158; }
+        else { baseR = 120; baseG = 113; baseB = 108; }
+        coreAlpha = dark ? 0.4 : 0.35;
+        glowAlpha = dark ? 0.08 : 0.06;
+      }
+
+      // Dynamic cloud scale — clouds grow as you zoom out so they stay
+      // visually prominent, and shrink slightly when zoomed in to stay crisp.
+      // zoomScale: 2× at full zoom-out (k=0.1), 1× at default (k=1), 0.7× at max zoom (k=8)
+      const zoomScale = Math.max(0.7, Math.min(2.5, 1 / Math.sqrt(t.k)));
+      const baseCloudScale = 2.2; // overall size multiplier
+      const stateScale = isFocusRoot ? 1.8 : isHovered ? 1.6 : isConnected ? 1.3 : 1.0;
+      const cloudScale = baseCloudScale * stateScale * zoomScale;
+
+      // Draw each lobe as a radial gradient circle (soft blob)
+      for (const [dx, dy, rm] of lobes) {
+        const lx = n.x + dx * r * cloudScale;
+        const ly = n.y + dy * r * cloudScale;
+        const lr = r * rm * cloudScale;
+
+        // Outer glow lobe
+        const glowR = lr * 2.5;
+        const gGrad = ctx.createRadialGradient(lx, ly, lr * 0.2, lx, ly, glowR);
+        gGrad.addColorStop(0, `rgba(${baseR},${baseG},${baseB},${glowAlpha * rm})`);
+        gGrad.addColorStop(0.6, `rgba(${baseR},${baseG},${baseB},${glowAlpha * rm * 0.3})`);
+        gGrad.addColorStop(1, `rgba(${baseR},${baseG},${baseB},0)`);
         ctx.beginPath();
-        ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
-        ctx.fillStyle = grad;
+        ctx.arc(lx, ly, glowR, 0, Math.PI * 2);
+        ctx.fillStyle = gGrad;
+        ctx.fill();
+
+        // Core lobe with soft edge
+        const cGrad = ctx.createRadialGradient(lx, ly, 0, lx, ly, lr);
+        cGrad.addColorStop(0, `rgba(${baseR},${baseG},${baseB},${coreAlpha * rm})`);
+        cGrad.addColorStop(0.5, `rgba(${baseR},${baseG},${baseB},${coreAlpha * rm * 0.6})`);
+        cGrad.addColorStop(1, `rgba(${baseR},${baseG},${baseB},0)`);
+        ctx.beginPath();
+        ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+        ctx.fillStyle = cGrad;
         ctx.fill();
       }
 
-      // Core dot
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-      if (isDimmed) {
-        ctx.fillStyle = dark ? "rgba(87,83,78,0.2)" : "rgba(214,211,209,0.3)";
-      } else if (isMatch) {
-        ctx.fillStyle = dark ? "#60a5fa" : "#2563eb";
-      } else if (isHovered) {
-        ctx.fillStyle = dark ? "#e7e5e4" : "#1c1917";
-      } else if (isConnected) {
-        ctx.fillStyle = dark ? "#a8a29e" : "#78716c";
-      } else {
-        ctx.fillStyle = dark ? "rgba(168,162,158,0.6)" : "rgba(120,113,108,0.5)";
-      }
-      ctx.fill();
-
-      // Label for hovered/connected/search-matched
-      if ((isHovered || isConnected || isMatch) && !isDimmed) {
-        ctx.font = `${isHovered ? "600" : "400"} ${isHovered ? 12 : 10}px system-ui, sans-serif`;
+      // Labels — always show for focus root + neighbors; also for hovered/connected/search
+      const showLabel = isFocusRoot || (focusNeighbors && isInFocus) ||
+        ((isHovered || isConnected || isMatch) && !isDimmed);
+      if (showLabel) {
+        const labelY = n.y + r * cloudScale + 8;
+        ctx.font = `${isFocusRoot || isHovered ? "600" : "400"} ${isFocusRoot || isHovered ? 12 : 10}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = dark ? "rgba(231,229,228,0.9)" : "rgba(28,25,23,0.85)";
-        ctx.fillText(n.title, n.x, n.y + r + 6, 140);
+        ctx.fillText(n.title, n.x, labelY, 140);
       }
     }
 
@@ -389,7 +503,7 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
         setTooltipPos({ x: e.clientX, y: e.clientY });
         canvas.style.cursor = "pointer";
       } else {
-        canvas.style.cursor = "grab";
+        canvas.style.cursor = "default";
       }
     },
     [screenToWorld, nodeAtPosition]
@@ -411,10 +525,10 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
         node.fx = node.x;
         node.fy = node.y;
         simRef.current?.alphaTarget(0.3).restart();
-        canvas.style.cursor = "grabbing";
+        canvas.style.cursor = "move";
       } else {
         dragNodeRef.current = null;
-        canvas.style.cursor = "grabbing";
+        canvas.style.cursor = "move";
       }
     },
     [screenToWorld, nodeAtPosition]
@@ -424,21 +538,48 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
     const node = dragNodeRef.current;
     isDraggingRef.current = false;
 
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    const wasClick = dx * dx + dy * dy < 9;
+
     if (node) {
       node.fx = null;
       node.fy = null;
       simRef.current?.alphaTarget(0);
 
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-      if (dx * dx + dy * dy < 9) {
-        onSelectNoteRef.current(node.id);
+      if (wasClick) {
+        // Double-click detection (300ms window)
+        const now = Date.now();
+        if (now - lastClickTimeRef.current < 300) {
+          // Double-click on node → focus it
+          onFocusNodeRef.current(node.id);
+          lastClickTimeRef.current = 0;
+        } else {
+          lastClickTimeRef.current = now;
+          // Single click → navigate to note (delayed to allow double-click)
+          const nodeId = node.id;
+          setTimeout(() => {
+            if (lastClickTimeRef.current !== 0) {
+              onSelectNoteRef.current(nodeId);
+              lastClickTimeRef.current = 0;
+            }
+          }, 300);
+        }
+      }
+    } else if (wasClick) {
+      // Double-click on empty space → exit focus
+      const now = Date.now();
+      if (now - lastClickTimeRef.current < 300 && focusNodeIdRef.current) {
+        onFocusNodeRef.current(null);
+        lastClickTimeRef.current = 0;
+      } else {
+        lastClickTimeRef.current = now;
       }
     }
 
     dragNodeRef.current = null;
     const canvas = canvasRef.current;
-    if (canvas) canvas.style.cursor = hoveredRef.current ? "pointer" : "grab";
+    if (canvas) canvas.style.cursor = hoveredRef.current ? "pointer" : "default";
   }, []);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -474,7 +615,7 @@ export const GraphView = forwardRef<GraphViewHandle, GraphViewProps>(function Gr
     <div ref={containerRef} className="absolute inset-0 overflow-hidden">
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 cursor-grab"
+        className="absolute inset-0 cursor-default"
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
