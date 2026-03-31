@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useMemo } from "react";
-import { X } from "lucide-react";
 import { buildGraphData } from "@/lib/graph";
 import { GraphView, type GraphViewHandle } from "@/components/graph/graph-view";
 import { GraphControls } from "@/components/graph/graph-controls";
@@ -47,16 +46,8 @@ export function GraphPanel({ notes, onSelectNote, onClose }: GraphPanelProps) {
           onZoomIn={() => graphRef.current?.zoomIn()}
           onZoomOut={() => graphRef.current?.zoomOut()}
           onResetView={() => graphRef.current?.resetView()}
+          onClose={onClose}
         />
-
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-14 z-10 p-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm shadow-sm text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-          title="Close graph"
-        >
-          <X size={16} />
-        </button>
       </div>
 
       {graphData.nodes.length === 0 && (

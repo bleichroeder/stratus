@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, ZoomIn, ZoomOut, Eye, EyeOff, Maximize, ArrowLeft } from "lucide-react";
+import { Search, ZoomIn, ZoomOut, Eye, EyeOff, Maximize, ArrowLeft, X } from "lucide-react";
 import Link from "next/link";
 import type { GraphData } from "@/lib/graph";
 
@@ -14,6 +14,7 @@ interface GraphControlsProps {
   onZoomOut: () => void;
   onResetView: () => void;
   showBackButton?: boolean;
+  onClose?: () => void;
 }
 
 export function GraphControls({
@@ -26,6 +27,7 @@ export function GraphControls({
   onZoomOut,
   onResetView,
   showBackButton = false,
+  onClose,
 }: GraphControlsProps) {
   const connectedCount = new Set(data.edges.flatMap((e) => [e.source, e.target])).size;
 
@@ -64,6 +66,18 @@ export function GraphControls({
 
       {/* Right column: zoom + toggle controls */}
       <div className="pointer-events-auto flex flex-col gap-1 rounded-lg border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm shadow-sm p-1">
+        {onClose && (
+          <>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400 transition-colors"
+              title="Close graph"
+            >
+              <X size={16} />
+            </button>
+            <div className="border-t border-stone-200 dark:border-stone-700 my-0.5" />
+          </>
+        )}
         <button
           onClick={onZoomIn}
           className="p-1.5 rounded hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400 transition-colors"
