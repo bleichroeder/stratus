@@ -9,7 +9,7 @@ import Link from "@tiptap/extension-link";
 import Underline from "@tiptap/extension-underline";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { common, createLowlight } from "lowlight";
-import { WikiLink } from "@/components/editor/wiki-link";
+import { WikiLinkStatic } from "@/components/editor/wiki-link-static";
 import { SketchBlockStatic } from "@/components/editor/sketch/sketch-node-static";
 import { CalloutBlockStatic } from "@/components/editor/callout/callout-node-static";
 import { MermaidBlockStatic } from "@/components/editor/mermaid/mermaid-node-static";
@@ -96,7 +96,7 @@ export default async function SharedNotePage({
         Link,
         Underline,
         CodeBlockLowlight.configure({ lowlight }),
-        WikiLink,
+        WikiLinkStatic,
         SketchBlockStatic,
         CalloutBlockStatic,
         MermaidBlockStatic,
