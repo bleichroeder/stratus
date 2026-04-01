@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase/service";
-import { generateHTML } from "@tiptap/html";
+import { generateHTML } from "@tiptap/html/server";
 import StarterKit from "@tiptap/starter-kit";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -13,6 +13,7 @@ import { WikiLink } from "@/components/editor/wiki-link";
 import { SketchBlockStatic } from "@/components/editor/sketch/sketch-node-static";
 import { CalloutBlockStatic } from "@/components/editor/callout/callout-node-static";
 import { MermaidBlockStatic } from "@/components/editor/mermaid/mermaid-node-static";
+import { MeetingMeta } from "@/components/editor/meeting-meta";
 
 const lowlight = createLowlight(common);
 const SHARE_EXPIRY_DAYS = 7;
@@ -99,6 +100,7 @@ export default async function SharedNotePage({
         SketchBlockStatic,
         CalloutBlockStatic,
         MermaidBlockStatic,
+        MeetingMeta,
       ]);
     } catch {
       html = "<p>Unable to render this note.</p>";
