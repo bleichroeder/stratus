@@ -60,6 +60,8 @@ interface SidebarProps {
   archiveCount: number;
   showGraph: boolean;
   onToggleGraph: () => void;
+  showCalendar: boolean;
+  onToggleCalendar: () => void;
   isMobile?: boolean;
   mobileMenuOpen?: boolean;
   onCloseMobileMenu?: () => void;
@@ -579,6 +581,8 @@ export function Sidebar({
   archiveCount,
   showGraph,
   onToggleGraph,
+  showCalendar,
+  onToggleCalendar,
   isMobile = false,
   mobileMenuOpen = false,
   onCloseMobileMenu,
@@ -1292,6 +1296,17 @@ export function Sidebar({
 
       {/* Footer */}
       <div className="border-t border-stone-200 dark:border-stone-800">
+        <button
+          onClick={onToggleCalendar}
+          className={`flex items-center gap-2 w-full px-4 py-2 text-sm transition-colors ${
+            showCalendar
+              ? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100"
+              : "text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800"
+          }`}
+        >
+          <CalendarDays size={14} />
+          <span>Calendar</span>
+        </button>
         <button
           onClick={onToggleGraph}
           className={`flex items-center gap-2 w-full px-4 py-2 text-sm transition-colors ${

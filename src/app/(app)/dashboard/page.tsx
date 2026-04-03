@@ -6,6 +6,8 @@ import { NoteEditor } from "@/components/editor/editor";
 import { TabBar, type Tab } from "@/components/editor/tabs";
 import { ArchivePanel } from "@/components/sidebar/archive-panel";
 import { GraphPanel } from "@/components/graph/graph-panel";
+import { CalendarPanel } from "@/components/calendar/calendar-panel";
+import { formatDailyNoteTitle } from "@/lib/context-hints";
 import { PromptModal, ConfirmModal } from "@/components/ui/modal";
 import {
   getNotes,
@@ -90,6 +92,7 @@ export default function AppPage() {
   const [archivedNotes, setArchivedNotes] = useState<Note[]>([]);
   const [showArchive, setShowArchive] = useState(false);
   const [showGraph, setShowGraph] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [activeNote, setActiveNote] = useState<Note | null>(null);
@@ -896,16 +899,15 @@ export default function AppPage() {
 
   const dailyNoteInFlight = useRef(false);
 
-  const handleDailyNote = useCallback(async () => {
+  const handleDailyNoteForDate = useCallback(async (targetDate: Date) => {
     // Guard against concurrent calls
     if (dailyNoteInFlight.current) return;
     dailyNoteInFlight.current = true;
     setCreatingDailyNote(true);
 
-    const title = todayString();
-    const now = new Date();
-    const yearStr = String(now.getFullYear());
-    const monthStr = now.toLocaleDateString("en-US", { month: "long" });
+    const title = formatDailyNoteTitle(targetDate);
+    const yearStr = String(targetDate.getFullYear());
+    const monthStr = targetDate.toLocaleDateString("en-US", { month: "long" });
 
     // Check if today's daily note already exists anywhere
     const existing = notes.find(
@@ -1041,6 +1043,10 @@ export default function AppPage() {
       dailyNoteInFlight.current = false;
     }
   }, [notes]);
+
+  const handleDailyNote = useCallback(() => {
+    handleDailyNoteForDate(new Date());
+  }, [handleDailyNoteForDate]);
 
   const preparingMeetingRef = useRef(false);
   const handlePrepareMeetingNote = useCallback(async (event: CalendarEvent) => {
@@ -1358,7 +1364,9 @@ export default function AppPage() {
         onToggleArchive={() => setShowArchive((v) => !v)}
         archiveCount={archivedNotes.length}
         showGraph={showGraph}
-        onToggleGraph={() => setShowGraph((v) => !v)}
+        onToggleGraph={() => { setShowGraph((v) => !v); setShowCalendar(false); }}
+        showCalendar={showCalendar}
+        onToggleCalendar={() => { setShowCalendar((v) => !v); setShowGraph(false); }}
         isMobile={isMobile}
         mobileMenuOpen={mobileMenuOpen}
         onCloseMobileMenu={() => setMobileMenuOpen(false)}
@@ -1383,7 +1391,14 @@ export default function AppPage() {
             onClose={() => setShowArchive(false)}
           />
         )}
-        {showGraph ? (
+        {showCalendar ? (
+          <CalendarPanel
+            notes={notes}
+            onSelectNote={openTab}
+            onDailyNote={handleDailyNoteForDate}
+            onClose={() => setShowCalendar(false)}
+          />
+        ) : showGraph ? (
           <GraphPanel notes={notes} onSelectNote={openTab} onClose={() => setShowGraph(false)} />
         ) : (
           <>
